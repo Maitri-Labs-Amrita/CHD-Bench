@@ -1,0 +1,16 @@
+{
+  "_comment": "Offline diagnosis scoring per dataset (chd_client.task.eval_diagnosis). Never shown to the model.",
+  "imagechd": {
+    "diagnosis": {
+      "excluded_classes": [
+        "atrioventricular_septal_defect"
+      ],
+      "unflagged_truth": "normal",
+      "notes": [
+        "Truth: imageCHD_dataset_diagnosis_info(updated20210510).xlsx. A case without any flag is a normal heart.",
+        "AVSD is not scored: the sheet's AVSD column is the formula ASD AND VSD, so it marks every case with both an ASD and a VSD as AVSD. The model still reports AVSD; the call is kept in report.json but left out of the scores.",
+        "The older sheet imageCHD_dataset_info.xlsx is not read."
+      ]
+    }
+  }
+}
