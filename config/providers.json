@@ -1,0 +1,61 @@
+{
+  "_comment": "Model providers for --model <provider>:<model> (chd_client.models.registry). A name without ':' is an Anthropic model. kind is the adapter: anthropic | openrouter | openai_compatible. Keys are environment variable NAMES, never values (a key that goes in a header: headers_env). config/providers.local.json (gitignored) replaces entries of the same name and adds new ones. cost: 'reported' (the reply carries usage.cost: kind openrouter and x_gateway entries only) or 'estimated' (prices per model, USD per million tokens); a model without a price is refused before the run (the runner stops on any unknown cost, whatever --cost-cap).",
+  "providers": {
+    "anthropic": {
+      "kind": "anthropic",
+      "api_key_env": "ANTHROPIC_API_KEY"
+    },
+    "openrouter": {
+      "kind": "openrouter",
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY",
+      "stream": true,
+      "cost": {"source": "reported"},
+      "image_format": "webp_lossless",
+      "routing": {
+        "_comment": "OpenRouter's request `provider` object per model (chd_client.models.registry.routing_for): the model's own key, else the longest vendor prefix (\"google/\"), else \"default\"; the rule that matches is sent whole. Privacy: data_collection deny = no provider that stores or trains on prompts; zdr true = zero-data-retention endpoints only. Google's endpoints keep prompts their safety filter flags (up to 90 days, no training: OpenRouter 'Safety Retention'), so the other models ignore google-vertex; Google's own models have only such endpoints, so they keep Google. Claude's order (amazon-bedrock, google-vertex: both ZDR) is in the code, these fields go on top. Check a slug at https://openrouter.ai/api/v1/endpoints/zdr (safety_retention).",
+        "default": {"data_collection": "deny", "zdr": true, "ignore": ["google-vertex"]},
+        "google/": {"data_collection": "deny", "zdr": true},
+        "anthropic/": {"data_collection": "deny", "zdr": true},
+        "openai/gpt-6.1-sol": {"_comment": "This model on OpenAI only. Azure (its only zero-retention endpoint) takes at most 50 images per request and Amazon Bedrock at most 100, fewer than a long episode sends. OpenAI keeps prompts for abuse checks (no training: data_collection deny). Requests that OpenRouter's moderation flags can run on openrouter_bedrock (below).", "data_collection": "deny", "order": ["openai"], "allow_fallbacks": false}
+      }
+    },
+    "openrouter_bedrock": {
+      "_comment": "A fallback route for requests that OpenRouter's moderation flags on OpenAI (CT renders as 'violence/graphic'): Amazon Bedrock, which takes at most 100 images per request, so run it with --max-images 96. Otherwise as the openrouter entry.",
+      "kind": "openrouter",
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY",
+      "stream": true,
+      "cost": {"source": "reported"},
+      "image_format": "webp_lossless",
+      "routing": {"default": {"data_collection": "deny", "order": ["amazon-bedrock"], "allow_fallbacks": false}}
+    },
+    "local": {
+      "_comment": "The local model gateway (chd-gateway). It replies in one piece (it refuses stream: true) and reports usage.cost 0.0.",
+      "kind": "openai_compatible",
+      "base_url_env": "CHD_LOCAL_BASE_URL",
+      "api_key_env": "CHD_LOCAL_API_KEY",
+      "api_key_optional": true,
+      "episode_headers": true,
+      "stream": false,
+      "x_gateway": true,
+      "effort": null,
+      "cost": {"source": "reported"}
+    },
+    "openai": {
+      "_comment": "effort null: --effort is not sent (gpt-4o and gpt-4.1 refuse reasoning_effort). For a reasoning model, set \"effort\": \"reasoning_effort\" in your copy of this entry in config/providers.local.json. max_output_tokens: gpt-4o 16384, from https://developers.openai.com/api/docs/models/gpt-4o (\"16,384 max output tokens\"). Keep it in your copy.",
+      "kind": "openai_compatible",
+      "base_url": "https://api.openai.com/v1",
+      "api_key_env": "OPENAI_API_KEY",
+      "stream": false,
+      "effort": null,
+      "max_tokens_param": "max_completion_tokens",
+      "max_output_tokens": {"gpt-4o": 16384},
+      "cost": {
+        "_comment": "OpenAI does not report a cost. Copy this entry to config/providers.local.json (an entry there replaces this one) and add each model you run with the prices from OpenAI's price page, USD per million tokens: \"<model>\": {\"input_per_mtok\": x, \"output_per_mtok\": y, \"cached_input_per_mtok\": z}. A model without a price is refused (never an invented cost).",
+        "source": "estimated",
+        "prices": {}
+      }
+    }
+  }
+}
