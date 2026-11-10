@@ -1,0 +1,233 @@
+{
+  "config_version": "chd-ct-nomask-v1",
+  "_comment": "Profile chd_ct_nomask_v1: chd_ct_v1 with no segmentation of any kind, for the 3d arm (CT only, the no-mask control of the 3d_seg arm). It is chd_ct_v1 with the segmentation section and the five tools that need it (slicer-mcp SEG_TOOLS: set_segment_visibility, set_segment_opacity, set_3d_content, set_slice_outlines, center_on_segments) removed; every other value, presets.xml and report.py are chd_ct_v1's. Without a segmentation section the server resets with no shells and the state has no segments.",
+  "mcp": {
+    "server_name": "slicer-mcp",
+    "instructions_title": "CHD cardiac CT viewer.",
+    "tools": [
+      "reset_view",
+      "bookmark_view",
+      "submit_report",
+      "set_slice",
+      "scroll_slice",
+      "set_window_preset",
+      "jump_to_point",
+      "point_at",
+      "orbit",
+      "set_view_direction",
+      "zoom",
+      "pan_to",
+      "set_render_preset",
+      "set_clip_box",
+      "set_clip_plane",
+      "clear_clip",
+      "measure"
+    ],
+    "report": "report.py"
+  },
+  "observation": {
+    "size_px": 512,
+    "background_rgb": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "vr_quality": "Normal",
+    "expected_fps": 1.0,
+    "oversampling": 1.0,
+    "png_compression_level": 3,
+    "state_decimals": 4,
+    "render_mode": "Perspective",
+    "raycast_technique": "Composite",
+    "surface_smoothing": false,
+    "ruler": "None",
+    "orientation_marker": {
+      "3d": {
+        "type": "Human",
+        "size": "Small"
+      },
+      "slices": {
+        "type": "Human",
+        "size": "Small"
+      }
+    }
+  },
+  "window_level": {
+    "presets": {
+      "CT-Mediastinum": [
+        350.0,
+        40.0
+      ],
+      "CT-Angio": [
+        700.0,
+        200.0
+      ],
+      "CT-Lung": [
+        1400.0,
+        -500.0
+      ],
+      "CT-Heart-Walls": [
+        400.0,
+        200.0
+      ],
+      "CT-Contrast-Mixing": [
+        500.0,
+        500.0
+      ]
+    },
+    "default_preset": "CT-Mediastinum",
+    "colormap": "vtkMRMLColorTableNodeGrey",
+    "interpolate": true,
+    "note": "CT-Heart-Walls shows heart muscle grey against white contrast blood; CT-Contrast-Mixing spreads the contrast blood itself over the grey scale."
+  },
+  "render": {
+    "_comment": "CHD-BloodPool (extra_presets_xml): opacity 0 below 150 HU, 0.35 from 250 to 600 HU, 0 above 800 HU; red single-hue colour map; CT-Cardiac3 shading. The other presets are Slicer 5.10's own.",
+    "presets": [
+      "CT-Coronary-Arteries-2",
+      "CT-Chest-Contrast-Enhanced",
+      "CHD-BloodPool"
+    ],
+    "default_preset": "CT-Coronary-Arteries-2",
+    "extra_presets_xml": "presets.xml",
+    "extra_presets_sha256": "b76593db2f4cbe6c493ded901d11c8e62f9cc07a501aa4f4f8d3c04cdb6eba6a",
+    "method": "vtkMRMLGPURayCastVolumeRenderingDisplayNode"
+  },
+  "slices": {
+    "scroll_max_slices": 200
+  },
+  "slice_tools": {
+    "_comment": "zoom view=slices zooms the three slice views about the focus (total zoom_range; while zoomed they stay centred on the focus); set_slice slab_mm = a maximum-intensity slab (slab_mm_range); measure draws a line (measure_color_rgb, named measure_color_name in its description; no text) and returns its length; point_at / jump_to_point return the mean HU in a ball of hu_ball_radius_mm.",
+    "zoom_range": [
+      1.0,
+      3.0
+    ],
+    "slab_mm_range": [
+      0.0,
+      20.0
+    ],
+    "measure_color_rgb": [
+      0.98,
+      0.84,
+      0.0
+    ],
+    "measure_color_name": "yellow",
+    "measure_line_thickness": 0.3,
+    "hu_ball_radius_mm": 1.0
+  },
+  "camera": {
+    "_comment": "Reset distance fits the volume's largest RAS extent E: (E/2)/tan(view_angle/2) + E/2, times reset_fit_margin.",
+    "view_angle_deg": 30.0,
+    "reset_fit_margin": 1.05,
+    "orbit_azimuth_range": [
+      -180.0,
+      180.0
+    ],
+    "orbit_elevation_range": [
+      -90.0,
+      90.0
+    ],
+    "orbit_roll_range": [
+      -180.0,
+      180.0
+    ],
+    "zoom_cumulative_range": [
+      0.25,
+      4.0
+    ],
+    "zoom_step_range": [
+      0.25,
+      4.0
+    ],
+    "pan_margin_mm": 50.0,
+    "default_view_direction": "anterior",
+    "view_directions": {
+      "anterior": {
+        "from": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "view_up": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "posterior": {
+        "from": [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        "view_up": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "left": {
+        "from": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "view_up": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "from": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "view_up": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "superior": {
+        "from": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "view_up": [
+          0.0,
+          -1.0,
+          0.0
+        ]
+      },
+      "inferior": {
+        "from": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "view_up": [
+          0.0,
+          1.0,
+          0.0
+        ]
+      }
+    }
+  },
+  "clip": {
+    "box_min_size_mm": 5.0,
+    "plane_offset_range_mm": [
+      -200.0,
+      200.0
+    ],
+    "plane_azimuth_range": [
+      -180.0,
+      180.0
+    ],
+    "plane_elevation_range": [
+      -90.0,
+      90.0
+    ]
+  }
+}

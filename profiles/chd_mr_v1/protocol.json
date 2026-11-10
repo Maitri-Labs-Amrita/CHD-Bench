@@ -1,0 +1,338 @@
+{
+  "config_version": "chd-mr-v1",
+  "_comment": "Profile chd_mr_v1: chd_ct_v1 for cardiac MRI. Volumes are rescaled per scan so the 99.5th percentile is 1000 (chd_client.task.cohorts.normalize_mr); the window and render presets are on that scale. Everything else the tools read is chd_ct_v1's; report.py has the HVSMR-2.0 class list.",
+  "mcp": {
+    "server_name": "slicer-mcp",
+    "instructions_title": "CHD cardiac MRI viewer.",
+    "tools": [
+      "reset_view",
+      "bookmark_view",
+      "submit_report",
+      "set_slice",
+      "scroll_slice",
+      "set_window_preset",
+      "jump_to_point",
+      "point_at",
+      "orbit",
+      "set_view_direction",
+      "zoom",
+      "pan_to",
+      "set_render_preset",
+      "set_clip_box",
+      "set_clip_plane",
+      "clear_clip",
+      "set_segment_visibility",
+      "set_segment_opacity",
+      "set_3d_content",
+      "set_slice_outlines",
+      "center_on_segments",
+      "measure"
+    ],
+    "report": "report.py"
+  },
+  "observation": {
+    "size_px": 512,
+    "background_rgb": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "vr_quality": "Normal",
+    "expected_fps": 1.0,
+    "oversampling": 1.0,
+    "png_compression_level": 3,
+    "state_decimals": 4,
+    "render_mode": "Perspective",
+    "raycast_technique": "Composite",
+    "surface_smoothing": false,
+    "ruler": "None",
+    "orientation_marker": {
+      "3d": {
+        "type": "Human",
+        "size": "Small"
+      },
+      "slices": {
+        "type": "Human",
+        "size": "Small"
+      }
+    }
+  },
+  "window_level": {
+    "presets": {
+      "MR-Default": [
+        1000.0,
+        500.0
+      ],
+      "MR-Blood": [
+        700.0,
+        650.0
+      ],
+      "MR-Wide": [
+        2000.0,
+        1000.0
+      ]
+    },
+    "default_preset": "MR-Default",
+    "colormap": "vtkMRMLColorTableNodeGrey",
+    "interpolate": true,
+    "note": "MRI intensities, not HU, scaled per scan so bright blood is about 1000: MR-Blood separates the bright blood from the darker walls; MR-Wide shows the whole range."
+  },
+  "render": {
+    "_comment": "MR-BloodPool: opacity 0 below 450, 0.35 from 600 up (bright blood); MR-Soft: a fainter ramp from 250 that also shows the walls. Both on the scaled MRI (extra_presets_xml).",
+    "presets": [
+      "MR-BloodPool",
+      "MR-Soft"
+    ],
+    "default_preset": "MR-BloodPool",
+    "extra_presets_xml": "presets.xml",
+    "extra_presets_sha256": "bb0188476f44ab805091253ef7fb062b13bb605499ab0b661cd308e601fddc75",
+    "method": "vtkMRMLGPURayCastVolumeRenderingDisplayNode"
+  },
+  "slices": {
+    "scroll_max_slices": 200
+  },
+  "slice_tools": {
+    "_comment": "zoom view=slices zooms the three slice views about the focus (total zoom_range; while zoomed they stay centred on the focus); set_slice slab_mm = a maximum-intensity slab (slab_mm_range); measure draws a line (measure_color_rgb, named measure_color_name in its description; no text) and returns its length; point_at / jump_to_point return the mean intensity (MRI: not HU) in a ball of hu_ball_radius_mm.",
+    "zoom_range": [
+      1.0,
+      3.0
+    ],
+    "slab_mm_range": [
+      0.0,
+      20.0
+    ],
+    "measure_color_rgb": [
+      0.98,
+      0.84,
+      0.0
+    ],
+    "measure_color_name": "yellow",
+    "measure_line_thickness": 0.3,
+    "hu_ball_radius_mm": 1.0
+  },
+  "camera": {
+    "_comment": "Reset distance fits the volume's largest RAS extent E: (E/2)/tan(view_angle/2) + E/2, times reset_fit_margin.",
+    "view_angle_deg": 30.0,
+    "reset_fit_margin": 1.05,
+    "orbit_azimuth_range": [
+      -180.0,
+      180.0
+    ],
+    "orbit_elevation_range": [
+      -90.0,
+      90.0
+    ],
+    "orbit_roll_range": [
+      -180.0,
+      180.0
+    ],
+    "zoom_cumulative_range": [
+      0.25,
+      4.0
+    ],
+    "zoom_step_range": [
+      0.25,
+      4.0
+    ],
+    "pan_margin_mm": 50.0,
+    "default_view_direction": "anterior",
+    "view_directions": {
+      "anterior": {
+        "from": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "view_up": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "posterior": {
+        "from": [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        "view_up": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "left": {
+        "from": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "view_up": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "right": {
+        "from": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "view_up": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "superior": {
+        "from": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "view_up": [
+          0.0,
+          -1.0,
+          0.0
+        ]
+      },
+      "inferior": {
+        "from": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "view_up": [
+          0.0,
+          1.0,
+          0.0
+        ]
+      }
+    }
+  },
+  "clip": {
+    "box_min_size_mm": 5.0,
+    "plane_offset_range_mm": [
+      -200.0,
+      200.0
+    ],
+    "plane_azimuth_range": [
+      -180.0,
+      180.0
+    ],
+    "plane_elevation_range": [
+      -90.0,
+      90.0
+    ]
+  },
+  "segmentation": {
+    "_comment": "Hollow shells of a given segmentation, built offline by `slicer-mcp case prepare --labels` (slicer_mcp/shell.py): shell thickness, 3D content modes, opacity, slice outlines, surface smoothing, center_on_segments fit, the registration check. classes: the structures; label = the value in the prepared label maps; where classes overlap the higher label wins. shell_only_note names what the shells alone show, in set_3d_content's description.",
+    "classes": [
+      {
+        "name": "LA",
+        "label": 1,
+        "aliases": [
+          "la",
+          "left_atrium"
+        ],
+        "color_rgb": [
+          0.95,
+          0.55,
+          0.7
+        ],
+        "color_name": "pink"
+      },
+      {
+        "name": "RA",
+        "label": 2,
+        "aliases": [
+          "ra",
+          "right_atrium"
+        ],
+        "color_rgb": [
+          0.45,
+          0.75,
+          1.0
+        ],
+        "color_name": "light blue"
+      },
+      {
+        "name": "LV",
+        "label": 3,
+        "aliases": [
+          "lv",
+          "left_ventricle"
+        ],
+        "color_rgb": [
+          0.8,
+          0.12,
+          0.15
+        ],
+        "color_name": "dark red"
+      },
+      {
+        "name": "RV",
+        "label": 4,
+        "aliases": [
+          "rv",
+          "right_ventricle"
+        ],
+        "color_rgb": [
+          0.15,
+          0.3,
+          0.9
+        ],
+        "color_name": "dark blue"
+      },
+      {
+        "name": "Ao",
+        "label": 5,
+        "aliases": [
+          "ao",
+          "aorta"
+        ],
+        "color_rgb": [
+          0.98,
+          0.8,
+          0.1
+        ],
+        "color_name": "yellow"
+      },
+      {
+        "name": "PA",
+        "label": 6,
+        "aliases": [
+          "pa",
+          "pulmonary_artery"
+        ],
+        "color_rgb": [
+          0.15,
+          0.72,
+          0.3
+        ],
+        "color_name": "green"
+      }
+    ],
+    "shell_thickness_mm": 1.0,
+    "modes": [
+      "ct_only",
+      "shell_only",
+      "ct_and_shell"
+    ],
+    "default_mode": "shell_only",
+    "default_opacity": 1.0,
+    "opacity_range": [
+      0.0,
+      1.0
+    ],
+    "default_slice_outlines": true,
+    "outline_thickness_px": 2,
+    "surface_smoothing_factor": 0.5,
+    "center_fit_margin": 1.3,
+    "registration_check": {
+      "max_outside_fraction": 0.02
+    },
+    "shell_only_note": "the heart without the chest"
+  }
+}
