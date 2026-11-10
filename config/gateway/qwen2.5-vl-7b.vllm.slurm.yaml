@@ -1,0 +1,29 @@
+# Qwen2.5-VL-7B with vLLM on a SLURM cluster: one job per worker, up to 4 workers.
+# Replace the sbatch values with your cluster's. The gateway's --workdir must be on a file system the nodes share.
+name: qwen2.5-vl-7b
+revision: main
+engine:
+  kind: vllm
+  model: Qwen/Qwen2.5-VL-7B-Instruct
+  tool_parser: hermes
+  python: /path/to/vllm-env/bin/python
+  # Qwen2.5-VL's own chat template drops tools: use the one shipped with chd-gateway.
+  args: ["--max-model-len", "32768", "--limit-mm-per-prompt", '{"image": 32}',
+         "--chat-template", "{templates}/qwen2_5_vl_tools.jinja", "--chat-template-content-format", "openai"]
+launcher:
+  kind: slurm
+  max_workers: 4
+  max_starting: 2
+  startup_timeout_s: 3600           # queue time + model loading
+  idle_stop_s: 900
+  sbatch:
+    partition: gpu
+    gres: "gpu:1"
+    cpus-per-task: 8
+    mem: 64G
+    time: "12:00:00"
+  setup: []                         # e.g. ["module load cuda/12.4"]
+scheduler:
+  episodes_per_worker: 4
+capabilities:
+  max_images: 32

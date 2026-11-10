@@ -1,0 +1,17 @@
+# Qwen2.5-VL-3B with the built-in Transformers engine: no vLLM needed, runs where PyTorch runs (CUDA, Apple MPS, CPU).
+# Slower than vLLM and without a prefix cache: each turn reprocesses the whole conversation.
+# Needs the transformers extra in the gateway's environment (no engine.python here, so the worker runs the gateway's
+# Python): in the CHD-Bench folder, uv sync --frozen --inexact --extra transformers (docs/GATEWAY.md, Quick start).
+name: qwen2.5-vl-3b
+revision: main
+engine:
+  kind: transformers
+  model: Qwen/Qwen2.5-VL-3B-Instruct
+  args: ["--max-new-tokens", "2048", "--chat-template", "builtin:qwen2_5_vl_tools"]  # its own template drops tools
+launcher:
+  kind: local
+  max_workers: 1
+scheduler:
+  episodes_per_worker: 1
+capabilities:
+  max_images: 16
