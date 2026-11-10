@@ -1,0 +1,4 @@
+{
+  "first_turn": "The case is loaded. This is the initial observation (step 0).",
+  "nudge": "No tool was called. Continue by calling a tool; the episode ends only when submit_report is accepted."
+}

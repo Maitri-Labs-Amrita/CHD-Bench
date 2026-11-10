@@ -1,0 +1,27 @@
+{
+  "_comment": "Deployment / runtime settings. NOT part of the research protocol and not hashed into traces. Paths are relative to the repo root unless absolute.",
+  "bridge_host": "127.0.0.1",
+  "bridge_port": 2017,
+  "cases_dir": "data/cases",
+  "traces_dir": "traces",
+  "imagechd_dir": "data/ImageCHD_dataset",
+  "slicer_executable": "/Applications/Slicer.app/Contents/MacOS/Slicer",
+  "client_timeout_s": 300,
+  "display_check": "require",
+  "stale_guard": {
+    "enabled": true,
+    "camera_mm": 5.0,
+    "view_up_deg": 2.0,
+    "slice_spacings": 1.0,
+    "featureless_fraction": 0.99
+  },
+  "eval_launch": {
+    "startup_timeout_s": 180,
+    "caffeinate": true,
+    "log": "data/dev/eval_slicer.log",
+    "state_file": "data/dev/eval_slicer.json"
+  },
+  "case_prep": {
+    "nrrd_compression": false
+  }
+}
