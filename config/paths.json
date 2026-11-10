@@ -1,0 +1,7 @@
+{
+  "_comment": "Data locations outside the checkout, by name. Put your own values in config/paths.local.json (same shape; its entries replace these), or point $CHD_PATHS at another file.",
+  "paths": {
+    "hvsmr_images": "~/data/HVSMR-2.0/orig",
+    "hvsmr_clinical": "~/data/HVSMR-2.0/hvsmr_clinical.csv"
+  }
+}

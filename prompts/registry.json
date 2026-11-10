@@ -1,0 +1,41 @@
+{
+  "defaults": {
+    "3d_seg": "chd_ct_v1",
+    "3d": "chd_ct_nomask_v1"
+  },
+  "prompts": [
+    {
+      "version": "chd_ct_v1",
+      "file": "chd_ct_v1.md",
+      "sha256": "af498b2dc9d33366a40823def09712c02088e918bde9d25ca698e41a26733688",
+      "arms": ["3d_seg"],
+      "modality": "ct",
+      "profile": "profiles/chd_ct_v1",
+      "report_kind": "diagnosis_normal",
+      "toolset": "base",
+      "summary": "Cardiac CT with a preloaded heart segmentation (LV, RV, LA, RA, Ao, PA); 16 ImageCHD defect classes plus normal."
+    },
+    {
+      "version": "chd_mr_v1",
+      "file": "chd_mr_v1.md",
+      "sha256": "ece6eda70d8fbd33bf5307c4a146f6e6d3ca95fc2e4a43a746d26eb0e45daa7b",
+      "arms": ["3d_seg"],
+      "modality": "mr",
+      "profile": "profiles/chd_mr_v1",
+      "report_kind": "diagnosis_normal",
+      "toolset": "base",
+      "summary": "Cardiac MRI with a preloaded heart segmentation (LV, RV, LA, RA, Ao, PA); 20 HVSMR-2.0 defect classes plus normal."
+    },
+    {
+      "version": "chd_ct_nomask_v1",
+      "file": "chd_ct_nomask_v1.md",
+      "sha256": "da2e9f68878783dae6a8921765dd9e6ed73bc971da5e28d59c34da03ca5110f2",
+      "arms": ["3d"],
+      "modality": "ct",
+      "profile": "profiles/chd_ct_nomask_v1",
+      "report_kind": "diagnosis_normal",
+      "toolset": "ct",
+      "summary": "Cardiac CT with no segmentation and no segmentation tools; 16 ImageCHD defect classes plus normal."
+    }
+  ]
+}
