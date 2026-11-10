@@ -1,0 +1,20 @@
+# Qwen2.5-VL-7B on this machine's GPU with vLLM (install vllm in the same environment, or set engine.python).
+name: qwen2.5-vl-7b
+description: Qwen2.5-VL-7B-Instruct, vLLM, local GPU
+revision: main                      # pin a commit hash for published results
+engine:
+  kind: vllm
+  model: Qwen/Qwen2.5-VL-7B-Instruct
+  tool_parser: hermes               # Qwen writes <tool_call>{...}</tool_call>
+  # Qwen2.5-VL's own chat template drops tools: use the one shipped with chd-gateway.
+  args: ["--max-model-len", "32768", "--limit-mm-per-prompt", '{"image": 32}', "--gpu-memory-utilization", "0.90",
+         "--chat-template", "{templates}/qwen2_5_vl_tools.jinja", "--chat-template-content-format", "openai"]
+launcher:
+  kind: local
+  gpus: [0]
+  max_workers: 1
+  idle_stop_s: 1800
+scheduler:
+  episodes_per_worker: 4            # vLLM batches episodes; its prefix cache keeps each one warm
+capabilities:
+  max_images: 32

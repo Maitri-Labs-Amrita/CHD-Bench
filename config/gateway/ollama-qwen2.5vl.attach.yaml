@@ -1,0 +1,12 @@
+# A model served by Ollama on this machine (ollama pull qwen2.5vl:7b; ollama serve).
+# The gateway does not start or stop Ollama; it only sends requests there. Check that the model supports tools in
+# Ollama before you use it with an agent.
+name: qwen2.5vl-ollama
+upstream_model: "qwen2.5vl:7b"       # the name Ollama knows the model by
+launcher:
+  kind: attach
+  urls: ["http://127.0.0.1:11434/v1"]
+cost:
+  source: zero_api_charge            # your own machine: no charge per request
+scheduler:
+  episodes_per_worker: 1
