@@ -1,0 +1,35 @@
+{
+ "_comment": "The no-mask arm 3d (the CT only, no segmentation of any kind: profile chd_ct_nomask_v1, prompt chd_ct_nomask_v1, ImageCHD only). No `labels`: arm 3d refuses them. The case ids below are examples; copy this file and set your own batch name, model, effort and cases.",
+ "batch": "nomask-example",
+ "runtime_base": "config/runtime.local.json",
+ "out_dir": "slurm/batches",
+ "arm": "3d",
+ "dataset": "imagechd",
+ "cost_cap": 10.0,
+ "episode_timeout_s": 5400,
+ "extra_args": [
+  "--max-steps",
+  "75"
+ ],
+ "jobs": [
+  {
+   "name": "argon-pilot",
+   "model": "openrouter:google/gemini-4-argon",
+   "effort": "high",
+   "cases": [
+    1007,
+    1023,
+    1028,
+    1048,
+    1051,
+    1063,
+    1066,
+    1081,
+    1102,
+    1111,
+    1112,
+    1133
+   ]
+  }
+ ]
+}
