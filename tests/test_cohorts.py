@@ -227,3 +227,21 @@ def test_run_batch_dataset_commands():
     assert run_batch.slicer_profile({"dataset": "imagechd"}) is None
     assert run_batch.DATASETS == ("imagechd", "hvsmr")
     assert run_batch.case_name(cfg, 24) == "HVSMR-24" and run_batch.case_name({}, 1001) == "ImageCHD-1001"
+
+
+def test_hvsmr_label_map_file_is_read_with_the_imagechd_codes(hvsmr_files, tmp_path):
+    """A label map file for HVSMR (e.g. the nnU-Net prediction) has the ImageCHD codes, as on the paper's runs; only
+    --labels gt (the dataset's own segmentation) uses the HVSMR codes."""
+    from chd_client import dicom_run
+    sitk = pytest.importorskip("SimpleITK")
+    img = sitk.GetImageFromArray(np.arange(64, dtype=np.int16).reshape(4, 4, 4))
+    sitk.WriteImage(img, str(hvsmr_files / "pat24_orig.nii.gz"))
+    mask = tmp_path / "pred.nii.gz"
+    mask.write_bytes(b"pred")
+    work = tmp_path / "work"
+    work.mkdir()
+    args, extra = dicom_run.cohort_prepare_args(cohorts.HVSMR, 24, str(mask), work)
+    assert args[args.index("--label-map") + 1] == cohorts.IMAGECHD_LABEL_MAP == "1=LV,2=RV,3=LA,4=RA,6=Ao,7=PA"
+    assert extra["label_map"] == cohorts.IMAGECHD_LABEL_MAP and extra["shell_source"] == "label_map"
+    args, extra = dicom_run.cohort_prepare_args(cohorts.HVSMR, 24, str(mask), work, label_map="1=LV,2=RV,3=LA,4=RA,5=Ao,6=PA")
+    assert extra["label_map"] == "1=LV,2=RV,3=LA,4=RA,5=Ao,6=PA"
