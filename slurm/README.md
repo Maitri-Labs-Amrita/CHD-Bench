@@ -1,13 +1,12 @@
 # Batches (SLURM optional)
 
 Runs several models over a list of ImageCHD or HVSMR-2.0 cases, unattended. Each job gets its own virtual display
-(slicer-eval-mcp's `tools/xvfb_session.py`, with slicer-eval-mcp's own `config/runtime.local.json` for the Xvfb
-settings) and its own Slicer (`chd-slicer launch`) on a free bridge port, then runs `run-episode` for each of its
+(`slicer-mcp xvfb-session`, with the Xvfb settings of `config/runtime.local.json`) and its own Slicer (`chd-slicer launch`) on a free bridge port, then runs `run-episode` for each of its
 cases. CPU only: Slicer renders with Mesa llvmpipe.
 
 **Without SLURM:** run each job of the config on one machine, one after the other:
 `uv run python slurm/run_batch.py --config slurm/batch_config.json --job <k>` for k = 0, 1, ...
-A job runs under Xvfb, so it needs Linux with Xvfb (see slicer-eval-mcp's `tools/setup_headless.sh`). On a Mac, run
+A job runs under Xvfb, so it needs Linux with Xvfb (`./setup.sh` installs it). On a Mac, run
 episodes one by one with `./run.sh`.
 
 ```bash
