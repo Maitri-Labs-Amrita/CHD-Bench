@@ -121,69 +121,21 @@ def test_replay_gets_the_resolved_runtime(tmp_path, monkeypatch):
     assert json.loads(open(seen["env"][config.RUNTIME_ENV]).read())["bridge_port"] == 45678
 
 
-PINNED_STATE = {"path": "/mcp", "commit": slicer.PINNED_COMMIT, "dirty": False}
-
-
 def test_a_failed_slicer_mcp_launch_is_not_published(tmp_path, monkeypatch):
     src = source(tmp_path)
     launch(src, 45678, "n1")
-    monkeypatch.setattr(slicer, "git_state", lambda *a, **k: dict(PINNED_STATE))
     monkeypatch.setattr(slicer.subprocess, "run", lambda cmd, env: subprocess.CompletedProcess(cmd, 1))
     assert slicer.run(["launch", "--runtime", str(src)]) == 1
     assert given(src)["launch_nonce"] == "n1"
     assert not list(config.RESOLVED_DIR.glob(".*.launch-*.json"))
-    assert not slicer.launch_record(config.resolved_runtime(src)).exists()
 
 
-def test_a_successful_launch_records_the_slicer_mcp_state_and_stop_removes_it(tmp_path, monkeypatch):
-    src = source(tmp_path)
-    monkeypatch.setattr(slicer, "git_state", lambda *a, **k: {**PINNED_STATE, "dirty": True})
-    monkeypatch.setattr(slicer.subprocess, "run", lambda cmd, env: subprocess.CompletedProcess(cmd, 0))
-    assert slicer.run(["launch", "--runtime", str(src)]) == 0
-    rec = slicer.launch_record(config.resolved_runtime(src))
-    assert json.loads(rec.read_text()) == {**PINNED_STATE, "dirty": True}
-    assert slicer.run(["launch", "--stop", "--runtime", str(src)]) == 0
-    assert not rec.exists()
-
-
-def write_record(tmp_path, **state):
-    rt = tmp_path / "runtime.json"
-    slicer.launch_record(rt).write_text(json.dumps({**PINNED_STATE, **state}))
-    return rt
-
-
-@pytest.mark.parametrize("state, msg", [
-    ({"dirty": True}, "with uncommitted changes, not the pinned"),
-    ({"commit": "0" * 40}, "launched from slicer-eval-mcp 0000"),
-    ({"commit": None}, "an unknown commit"),
-])
-def test_check_launched_pin_refuses_an_unpinned_or_dirty_launch(tmp_path, monkeypatch, state, msg):
-    monkeypatch.delenv(slicer.ALLOW_ENV, raising=False)
-    rt = write_record(tmp_path, **state)
-    with pytest.raises(slicer.SlicerMCPVersionError, match=msg):
-        slicer.check_launched_pin(rt)
-    monkeypatch.setenv(slicer.ALLOW_ENV, "1")
-    assert slicer.check_launched_pin(rt)["pinned"] is False
-
-
-def test_check_launched_pin_passes_a_pinned_launch_and_no_record(tmp_path, monkeypatch):
-    monkeypatch.delenv(slicer.ALLOW_ENV, raising=False)
-    assert slicer.check_launched_pin(tmp_path / "never_launched.json") is None
-    assert slicer.check_launched_pin(write_record(tmp_path))["pinned"] is True
-
-
-def test_stop_and_check_run_on_an_unpinned_checkout(monkeypatch):
-    def unpinned(*a, **k):
-        raise slicer.SlicerMCPVersionError("not pinned")
-    monkeypatch.setattr(slicer, "check_pin", unpinned)
-    monkeypatch.setattr(slicer, "run", lambda argv: 0)
-    for argv in (["launch", "--stop"], ["launch", "--check"]):
-        with pytest.raises(SystemExit) as e:
-            slicer.main(argv)
-        assert e.value.code == 0
-    with pytest.raises(SystemExit) as e:
-        slicer.main(["launch"])
-    assert e.value.code == 2
+def test_the_slicer_mcp_source_names_its_version_and_commit():
+    import slicer_mcp
+    st = slicer.source()
+    assert st["version"] == slicer_mcp.__version__
+    assert {"commit", "dirty", "from_checkout", "path"} <= set(st)
+    assert (slicer.repo() / "slicer_bridge" / "SlicerMCPBridge" / "start_bridge.py").is_file()
 
 
 def test_a_runtime_without_a_required_key_is_refused_before_anything_runs(tmp_path, capsys):
@@ -207,17 +159,3 @@ def test_a_runtime_that_is_not_json_is_refused_before_anything_runs(tmp_path, ca
     with pytest.raises(SystemExit) as e:
         run_episode.main(["--imagechd", "1112", "--labels", "gt", "--runtime", str(bad), "--dry-run-scripted"])
     assert e.value.code == 2 and "runtime:" in capsys.readouterr().err
-
-
-def test_an_untracked_file_makes_the_checkout_dirty(tmp_path):
-    def git(*a):
-        subprocess.run(["git", "-C", str(tmp_path), *a], check=True, capture_output=True)
-    git("init", "-q")
-    (tmp_path / ".gitignore").write_text("data/\n")
-    git("add", ".gitignore")
-    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "x")
-    (tmp_path / "data").mkdir()
-    (tmp_path / "data" / "log.txt").write_text("ignored")
-    assert slicer.git_state(tmp_path)["dirty"] is False
-    (tmp_path / "shadow.py").write_text("")
-    assert slicer.git_state(tmp_path)["dirty"] is True

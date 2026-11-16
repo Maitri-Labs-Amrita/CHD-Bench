@@ -308,15 +308,13 @@ def temporary_cohort_case(cohort, n, labels, runtime=None, run=subprocess.run, e
 
 @contextmanager
 def _temporary(prepare_args, extra, runtime, run, echo, factory=TemporaryCase):
-    pin = slicer.check_pin()
-    launched = slicer.check_launched_pin(resolved_runtime(runtime))
+    source = slicer.source()
     tmp = Path(tempfile.mkdtemp(prefix=".chd_dicom_run_", dir=Path(runtime).resolve().parent if runtime else None))
     try:
         rt_path = resolved_runtime(runtime, out=tmp / "runtime.json")
         rt_args = ["--runtime", str(rt_path)]
         out = task_python([*slicer.CLI, *slicer.with_defaults(["case", "prepare", *prepare_args, *rt_args])], run)
-        info = {**json.loads(out.strip().splitlines()[-1]), **extra, "slicer_mcp_checkout": pin,
-                "slicer_mcp_launched": launched}
+        info = {**json.loads(out.strip().splitlines()[-1]), **extra, "slicer_mcp": source}
         case_id = info["case_id"]
         try:
             if echo:

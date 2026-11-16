@@ -25,13 +25,13 @@ What it does:
    When the launch fails or a signal comes during it, the stop runs only for the Slicer this run.sh started: the
    launch gets a nonce of its own ($SLICER_MCP_LAUNCH_NONCE), and the stop runs only when the launch state file
    records that nonce (a Slicer started by something else is never stopped).
-   On Linux all three run on a virtual display: slicer-eval-mcp's tools/xvfb_session.py with slicer-eval-mcp's own
+   On Linux all three run on a virtual display: slicer-mcp's xvfb-session with the Xvfb settings of CHD-Bench's
    config/runtime.local.json (./setup.sh writes it). On macOS they run directly.
 
 Exit code: run-episode's (0 only when the model's report was accepted), 10 when Slicer did not start, 11 when the
 episode succeeded but Slicer did not stop (the stop failed, or it printed "not stopped"), 2 for a usage error or a
 model that cannot run (a missing key or price, ...); 128 + the signal number when a signal came while Slicer was
-starting, and on Linux also when the run was stopped by a signal (tools/xvfb_session.py).
+starting, and on Linux also when the run was stopped by a signal (slicer-mcp xvfb-session).
 --runtime <file> is used for the launch and the stop too. The eval Slicer runs the episode's task profile
 (run_episode.arm_profile: chd_mr_v1 for MRI cases, chd_ct_nomask_v1 for --arm 3d, the *_no3d_v1 copy for --arm
 2d_seg; $CHD_RUN_SH_PROFILE in the episode shell).
@@ -86,7 +86,7 @@ else
   [ -z "$out" ] || printf '%s\n' "$out"
   case "$out" in *": not stopped"*)  # slicer-mcp prints this and exits 0; it forgets the launch, so no retry
     echo "run.sh: chd-slicer launch --stop did not stop Slicer (line above): a Slicer may still run; find it with ps" \
-      "and stop it (on Linux, tools/xvfb_session.py stops what is left on its display)" >&2
+      "and stop it (on Linux, slicer-mcp xvfb-session stops what is left on its display)" >&2
     [ "$rc" != 0 ] || rc=11 ;;
   esac
 fi
@@ -108,7 +108,7 @@ def options(args):
 def own_launch(nonce, runtime=None) -> bool:
     """Whether the eval launch the state file records is the one started with `nonce` (this run.sh's): its launch_id.
     The state file is slicer-mcp's (slicer_mcp.launch._state_path: the runtime's eval_launch.state_file, else
-    slicer-eval-mcp's data/dev/eval_slicer.json); the runtime is the one chd-slicer launch read ($SLICER_MCP_RUNTIME,
+    data/dev/eval_slicer.json); the runtime is the one chd-slicer launch read ($SLICER_MCP_RUNTIME,
     else the default). False without a nonce, a state file or a runtime."""
     if not nonce:
         return False
@@ -121,15 +121,14 @@ def own_launch(nonce, runtime=None) -> bool:
     return isinstance(state, dict) and state.get("launch_id") == nonce
 
 
-def command(args, linux, xvfb_session=None, xvfb_runtime=None) -> list:
-    """The command to exec: the episode shell, on Linux under slicer-eval-mcp's xvfb_session with its own runtime
-    (chd_client.slicer.xvfb_runtime, as slurm/run_batch.py)."""
+def command(args, linux) -> list:
+    """The command to exec: the episode shell, on Linux under slicer-mcp's xvfb-session with the runtime that holds
+    the Xvfb settings (chd_client.slicer.xvfb_session_command, as slurm/run_batch.py)."""
     inner = ["bash", "-c", INNER, "run.sh", *map(str, args)]
     if not linux:
         return inner
     from chd_client import slicer
-    session = xvfb_session or slicer.repo() / "tools" / "xvfb_session.py"
-    return [sys.executable, str(session), "--runtime", str(xvfb_runtime or slicer.xvfb_runtime()), "--", *inner]
+    return slicer.xvfb_session_command(inner)
 
 
 def prepare(args, environ, env_path=env_file.ENV_FILE):

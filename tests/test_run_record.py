@@ -283,7 +283,7 @@ def test_provenance_folder(tmp_path):
     assert prov["request"]["model"] == "scripted" and "python" in prov
     assert len(prov["scoring_v1_sha256"]) == 64 and "commit" in prov["harness_git"]
     assert prov["profile"] == "chd_ct_v1" and len(prov["profile_protocol_sha256"]) == 64
-    assert prov["slicer_mcp"]["pinned_commit"] == slicer.PINNED_COMMIT and "commit" in prov["slicer_mcp"]
+    assert prov["slicer_mcp"]["version"] == slicer.source()["version"] and "commit" in prov["slicer_mcp"]
 
 
 def _cli(monkeypatch, tmp_path, episode):

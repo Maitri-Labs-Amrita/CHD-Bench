@@ -7,7 +7,7 @@ The job index is --job, else $SLURM_ARRAY_TASK_ID (a Slurm array task per job). 
 1. writes <out_dir>/<batch>/job<k>_<name>/runtime.json: a copy of the runtime (`runtime_base`, paths made absolute) with its own
    bridge_port (port_base + k), its own cases_dir (the same ImageCHD case prepared by two jobs at once would share
    one <case_id>.nrrd, and the first to finish deletes it) and its own eval-launch state file and log;
-2. re-runs itself under slicer-eval-mcp's tools/xvfb_session.py (a free display number; every process on it is stopped
+2. re-runs itself under slicer-mcp's xvfb-session (a free display number; every process on it is stopped
    when the job ends), starts the eval Slicer there (`chd-slicer launch`, the chd_ct_v1 profile; arm 3d:
    chd_ct_nomask_v1; HVSMR: chd_mr_v1; arm 2d_seg: the dataset's *_no3d_v1 copy) and checks it;
 3. runs `uv run run-episode --imagechd <id> ...` for each case, one after the other (a failed case is logged and
@@ -203,11 +203,9 @@ def slicer_command(runtime_path, action=None, profile=None) -> list:
 
 
 def xvfb_wrap(inner) -> list:
-    """slicer-eval-mcp's tools/xvfb_session.py with its own runtime (the Xvfb settings are the environment's, not the
-    job's; chd_client.slicer.xvfb_runtime)."""
+    """slicer-mcp's xvfb-session with the runtime that holds the Xvfb settings (chd_client.slicer.xvfb_runtime)."""
     from chd_client import slicer
-    return ["uv", "run", "python", str(slicer.repo() / "tools" / "xvfb_session.py"), "--runtime",
-            str(slicer.xvfb_runtime()), "--"] + list(inner)
+    return ["uv", "run", "slicer-mcp", "xvfb-session", "--runtime", str(slicer.xvfb_runtime()), "--"] + list(inner)
 
 
 def read_dotenv(path=ENV_FILE) -> dict:

@@ -25,11 +25,10 @@ def sha12(path) -> str:
 
 @pytest.fixture(autouse=True)
 def _imagechd(tmp_path, monkeypatch):
-    """A synthetic ImageCHD folder (cases 1003, 1008) as the default dataset, and a pinned slicer-eval-mcp checkout."""
+    """A synthetic ImageCHD folder (cases 1003, 1008) as the default dataset, and a fixed slicer-mcp source."""
     d = make_dataset(tmp_path / "ImageCHD")
     monkeypatch.setenv("CHD_IMAGECHD_DIR", str(d))
-    monkeypatch.setattr(slicer, "check_pin", lambda *a, **k: {"pinned": True})
-    monkeypatch.setattr(slicer, "check_launched_pin", lambda *a, **k: {"pinned": True, "launched": True})
+    monkeypatch.setattr(slicer, "source", lambda: {"version": "0.1.0", "commit": "c1", "dirty": False})
     return d
 IMAGECHD_LIST = {"dir": "/data/ImageCHD", "cases": [{"id": 1003, "flags": [], "spacing_mm": [0.33, 0.33, 0.75]},
                                                     {"id": 1008, "flags": ["DORV"], "spacing_mm": [0.3, 0.3, 0.75]}]}
@@ -171,18 +170,6 @@ def test_failed_conversion_raises_before_anything_else(tmp_path):
         with dicom_run.temporary_imagechd_case(1008, run=fake, echo=None):
             pass
     assert len(fake.calls) == 1
-
-
-def test_an_unpinned_slicer_eval_mcp_is_refused(monkeypatch):
-    monkeypatch.undo()
-    monkeypatch.delenv(slicer.ALLOW_ENV, raising=False)
-    with pytest.raises(slicer.SlicerMCPVersionError, match="not the pinned"):
-        slicer.check_pin(state={"path": "/x", "commit": "0" * 40, "dirty": False})
-    with pytest.raises(slicer.SlicerMCPVersionError, match="uncommitted changes"):
-        slicer.check_pin(state={"path": "/x", "commit": slicer.PINNED_COMMIT, "dirty": True})
-    assert slicer.check_pin(state={"path": "/x", "commit": slicer.PINNED_COMMIT, "dirty": False})["pinned"]
-    monkeypatch.setenv(slicer.ALLOW_ENV, "1")
-    assert slicer.check_pin(state={"path": "/x", "commit": "0" * 40, "dirty": False})["pinned"] is False
 
 
 def test_trace_gets_no_path_summary_does():
@@ -445,20 +432,6 @@ def hashlib_hex(path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def test_a_case_records_the_slicer_mcp_checkout_and_launch(tmp_path, monkeypatch):
-    monkeypatch.setattr(slicer, "check_pin", lambda *a, **k: {"commit": "c1", "pinned": True})
-    monkeypatch.setattr(slicer, "check_launched_pin", lambda rt: {"commit": "c2", "pinned": True, "rt": str(rt)})
+def test_a_case_records_the_slicer_mcp_source(tmp_path, monkeypatch):
     with dicom_run.temporary_imagechd_case(1008, run=FakeRun(), echo=None) as tc:
-        assert tc.info["slicer_mcp_checkout"] == {"commit": "c1", "pinned": True}
-        assert tc.info["slicer_mcp_launched"]["commit"] == "c2"
-
-
-def test_an_unpinned_launch_is_refused_before_the_case_is_prepared(monkeypatch):
-    def refuse(rt):
-        raise slicer.SlicerMCPVersionError("launched from another commit")
-    monkeypatch.setattr(slicer, "check_launched_pin", refuse)
-    fake = FakeRun()
-    with pytest.raises(slicer.SlicerMCPVersionError, match="another commit"):
-        with dicom_run.temporary_imagechd_case(1008, run=fake, echo=None):
-            pass
-    assert fake.calls == []
+        assert tc.info["slicer_mcp"] == {"version": "0.1.0", "commit": "c1", "dirty": False}

@@ -50,8 +50,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/chd_client"]
 
+# slicer-mcp (the 3D Slicer environment) at the exact commit this release is tested with; uv.lock records it, and
+# every run records the commit it used. To move to another commit: change rev, then `uv lock`.
 [tool.uv.sources]
-slicer-mcp = { path = "../slicer-eval-mcp", editable = true }
+slicer-mcp = { git = "https://github.com/Maitri-Labs-Amrita/slicer-eval-mcp", rev = "ebd908db26ccf4a0b181523e30742747dd4152ae" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

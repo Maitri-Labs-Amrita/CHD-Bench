@@ -48,15 +48,14 @@ def file_sha256(path) -> str | None:
 
 def scorer_info(repo=None, profile=None) -> dict:
     """The harness (scorer) code and config: CHD-Bench's commit, its scoring config and task profile hashes, and the
-    slicer-eval-mcp checkout the environment ran from (chd_client.slicer.PINNED_COMMIT). profile: the episode's task
+    slicer-mcp code the environment ran (chd_client.slicer.source: version and commit). profile: the episode's task
     profile folder when it is not chd_ct_v1 (the 3d arm's chd_ct_nomask_v1)."""
     from chd_client import slicer
     from chd_client.task.config import PROFILE, REPO
     repo = Path(repo or REPO)
     profile = Path(profile) if profile is not None else PROFILE
     try:
-        server = slicer.git_state()
-        server["pinned_commit"] = slicer.PINNED_COMMIT
+        server = slicer.source()
     except Exception as e:  # noqa: BLE001
         server = {"error": f"{type(e).__name__}: {e}"}
     return {"harness_git": git_info(repo),

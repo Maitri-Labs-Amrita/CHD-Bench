@@ -51,14 +51,14 @@ def test_macos_keeps_caffeinate():
     assert sc.chd_runtime(None, CHD_BASE, slicer="/s", linux=False)["eval_launch"]["caffeinate"] is True
 
 
-def test_mcp_file_sets_xvfb_keys_on_linux_only():
+def test_the_xvfb_keys_are_set_on_linux_only():
     base = {"bridge_port": 2017, "eval_launch": {"caffeinate": True, "log": "x"}}
     old = {"bridge_port": "auto", "xvfb_grace_s": 50, "extra_lib_dirs": ["/old"]}
-    new = sc.mcp_runtime(old, base, slicer="/s", xvfb="/x/Xvfb", lib_dirs=["/l"], linux=True)
+    new = sc.chd_runtime(old, base, slicer="/s", xvfb="/x/Xvfb", lib_dirs=["/l"], linux=True)
     assert new["slicer_executable"] == "/s" and new["xvfb_executable"] == "/x/Xvfb"
     assert new["extra_lib_dirs"] == ["/l"] and new["xvfb_grace_s"] == 50 and new["bridge_port"] == "auto"
     assert new["eval_launch"] == {"caffeinate": False, "log": "x"}
-    mac = sc.mcp_runtime(None, base, slicer="/s", linux=False)
+    mac = sc.chd_runtime(None, base, slicer="/s", linux=False)
     assert "xvfb_executable" not in mac and "extra_lib_dirs" not in mac and mac["eval_launch"]["caffeinate"] is True
 
 

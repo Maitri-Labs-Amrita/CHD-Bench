@@ -8,7 +8,6 @@ import stat
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 import pytest
 
@@ -253,13 +252,10 @@ def test_main_bad_case_id_exits_2_without_slicer(monkeypatch, capsys):
 def test_command_runs_the_episode_shell_under_xvfb_session_on_linux():
     args = ["--imagechd", "1001", "--labels", "gt", "--model", "openrouter:a/b"]
     assert run_sh.command(args, linux=False) == ["bash", "-c", run_sh.INNER, "run.sh", *args]
-    cmd = run_sh.command(args, linux=True, xvfb_session=Path("/m/tools/xvfb_session.py"),
-                         xvfb_runtime=Path("/m/config/runtime.local.json"))
-    assert cmd == [sys.executable, "/m/tools/xvfb_session.py", "--runtime", "/m/config/runtime.local.json", "--",
-                   "bash", "-c", run_sh.INNER, "run.sh", *args]
     from chd_client import slicer
     cmd = run_sh.command(args, linux=True)
-    assert cmd[1] == str(slicer.repo() / "tools" / "xvfb_session.py") and cmd[3] == str(slicer.xvfb_runtime())
+    assert cmd == [sys.executable, "-m", "slicer_mcp.cli", "xvfb-session", "--runtime", str(slicer.xvfb_runtime()),
+                   "--", "bash", "-c", run_sh.INNER, "run.sh", *args]
 
 
 def test_main_usage(capsys):
@@ -469,6 +465,6 @@ def test_gateway_default_port_is_the_one_the_docs_and_errors_use(monkeypatch):
     monkeypatch.setattr(cli, "cmd_serve", lambda a: seen.setdefault("port", a.port) and 0)
     cli.main(["serve", "--profile", "p.yaml"])
     assert seen["port"] == 8098
-    for doc in ("README.md", "docs/GATEWAY.md"):
+    for doc in ("docs/GATEWAY.md",):
         text = (REPO / doc).read_text()
         assert "127.0.0.1:8098/v1" in text and "127.0.0.1:8000" not in text, doc

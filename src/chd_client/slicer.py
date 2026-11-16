@@ -1,9 +1,8 @@
 """The environment: slicer-mcp (the slicer-eval-mcp repo), run with CHD-Bench's task profile.
 
-CHD-Bench holds no environment code. slicer-mcp is an editable install of a slicer-eval-mcp checkout (pyproject
-[tool.uv.sources]): it runs only from a checkout, because its Slicer bridge and case-preparation scripts are not in its
-wheel. PINNED_COMMIT is the slicer-eval-mcp commit this release is tested with; `check_pin` refuses another commit (or uncommitted
-changes) unless CHD_ALLOW_SLICER_MCP_COMMIT=1.
+CHD-Bench holds no environment code. slicer-mcp is a dependency installed from its git repository (pyproject
+[tool.uv.sources]; uv.lock records the exact commit, and `uv sync` installs that one). The package ships its Slicer
+bridge and case-preparation scripts. Every run records the slicer-mcp version and commit it used (source()).
 
     chd-slicer launch [--no-main-window] [--check | --stop]     the Slicer that serves the bridge (slicer-mcp launch)
     chd-slicer case prepare ... | case remove <case_id> ...     slicer-mcp case, with the CHD profile
@@ -11,10 +10,10 @@ changes) unless CHD_ALLOW_SLICER_MCP_COMMIT=1.
     chd-slicer tools-md [--check]                               docs/TOOLS.md: the tools as the model receives them
 
 Every command gets `--profile profiles/chd_ct_v1` (where it takes one) and `--runtime <the runtime with absolute
-paths>` unless given (task.config.resolved_runtime): slicer-mcp would read relative paths against its own checkout.
+paths>` unless given (task.config.resolved_runtime), so relative paths always mean CHD-Bench's folder.
 Options take their value as the next argument (`--runtime R`); `--runtime=R` / `--profile=P` are refused.
-The virtual display of a Linux server (Xvfb) is the environment's: slicer-eval-mcp's tools/xvfb_session.py with its own
-config/runtime.local.json (tools/setup_headless.sh writes it).
+The virtual display of a Linux server (Xvfb): slicer-mcp's xvfb-session, with CHD-Bench's own runtime, which holds the
+Xvfb settings (xvfb_executable, extra_lib_dirs; ./setup.sh writes them with `slicer-mcp setup-headless`).
 """
 
 import os
@@ -26,71 +25,23 @@ from chd_client.task import config
 from chd_client.task.config import PROFILE, resolved_runtime
 
 TOOLS_MD = PROFILE.parents[1] / "docs" / "TOOLS.md"
-# slicer-eval-mcp with observation.views (the 2d_seg arm's profiles); every profile with the 3D view gets the same tools
-PINNED_COMMIT = "7103557fafd9cc5f8eeaec82069fc810363edd44"
-ALLOW_ENV = "CHD_ALLOW_SLICER_MCP_COMMIT"
 TAKES_PROFILE = {"launch", "serve", "case prepare"}
 TAKES_RUNTIME = {"launch", "serve", "case prepare", "case remove"}
 
 
-class SlicerMCPVersionError(RuntimeError):
-    pass
-
-
 def repo() -> Path:
-    """The slicer-eval-mcp checkout slicer-mcp is installed from."""
+    """Where slicer-mcp's own files are: its source checkout, or the copy shipped in the installed package."""
     from slicer_mcp.config import REPO
     return Path(REPO)
 
 
-def git_state(path=None) -> dict:
-    """{commit, dirty} of the slicer-eval-mcp checkout (None values when it is not a git checkout). dirty: a modified
-    or an untracked file (an untracked module can shadow a pinned one); gitignored files (data/, logs) do not count."""
-    path = Path(path or repo())
-
-    def git(*a):
-        p = subprocess.run(["git", "-C", str(path), *a], capture_output=True, text=True)
-        return p.stdout.strip() if p.returncode == 0 else None
-    commit = git("rev-parse", "HEAD")
-    status = git("status", "--porcelain", "--untracked-files=all")
-    return {"path": str(path), "commit": commit, "dirty": bool(status) if status is not None else None}
-
-
-def check_pin(path=None, state=None) -> dict:
-    """The checkout's git state; raises SlicerMCPVersionError when it is not PINNED_COMMIT or has uncommitted changes,
-    unless $CHD_ALLOW_SLICER_MCP_COMMIT=1 (then the state says `pinned: false` and the run records it)."""
-    st = state or git_state(path)
-    st["pinned"] = st["commit"] == PINNED_COMMIT and st["dirty"] is False
-    if not st["pinned"] and os.environ.get(ALLOW_ENV) != "1":
-        raise SlicerMCPVersionError(
-            f"slicer-eval-mcp at {st['path']} is at {st['commit'] or 'an unknown commit'}"
-            f"{' with uncommitted changes' if st['dirty'] else ''}, not the pinned {PINNED_COMMIT[:12]}. "
-            f"Check out {PINNED_COMMIT[:12]} there, or set {ALLOW_ENV}=1 to run anyway (the run records it).")
-    return st
-
-
-def launch_record(canon) -> Path:
-    """The file beside a resolved runtime that records which slicer-eval-mcp code the running Slicer loaded."""
-    canon = Path(canon)
-    return canon.with_name(f"{canon.name}.slicer_mcp.json")
-
-
-def check_launched_pin(runtime) -> dict | None:
-    """The launch-time git state of the running Slicer bridge (None when no launch was recorded). Raises
-    SlicerMCPVersionError when the bridge was launched from a commit other than PINNED_COMMIT or from a dirty
-    checkout, even if the checkout on disk is pinned now, unless $CHD_ALLOW_SLICER_MCP_COMMIT=1."""
-    import json
-    f = launch_record(runtime)
-    if not f.is_file():
-        return None
-    st = json.loads(f.read_text())
-    st["pinned"] = st.get("commit") == PINNED_COMMIT and st.get("dirty") is False
-    if not st["pinned"] and os.environ.get(ALLOW_ENV) != "1":
-        raise SlicerMCPVersionError(
-            f"the running Slicer bridge was launched from slicer-eval-mcp {st.get('commit') or 'an unknown commit'}"
-            f"{' with uncommitted changes' if st.get('dirty') else ''}, not the pinned {PINNED_COMMIT[:12]}: "
-            f"relaunch it (chd-slicer launch --stop, then chd-slicer launch), or set {ALLOW_ENV}=1")
-    return st
+def source() -> dict:
+    """The slicer-mcp code in use: {version, commit, dirty, from_checkout, path}. commit: the git commit it was
+    installed from (or the checkout's HEAD); dirty: uncommitted changes in a checkout (False for an installed package)."""
+    import slicer_mcp
+    from slicer_mcp.config import FROM_CHECKOUT
+    from slicer_mcp.tracing.logger import git_info
+    return {"version": slicer_mcp.__version__, **git_info(), "from_checkout": FROM_CHECKOUT, "path": str(repo())}
 
 
 CLI = ("-m", "slicer_mcp.cli")
@@ -139,13 +90,10 @@ def run(argv) -> int:
     env = dict(os.environ)
     if rest[:1] == ["launch"] and not {"--stop", "--check"} & set(rest):
         staging, canon = config.launch_runtime(runtime)
-        state = git_state()
         try:
             rc = subprocess.run(command(with_defaults([*rest, "--runtime", staging])), env=env).returncode
             if rc == 0:
                 config.publish_launch(staging, canon)
-                import json
-                launch_record(canon).write_text(json.dumps({k: state[k] for k in ("path", "commit", "dirty")}))
             return rc
         finally:
             staging.unlink(missing_ok=True)
@@ -155,15 +103,18 @@ def run(argv) -> int:
     rc = subprocess.run(command(args), env=env).returncode
     if rc == 0 and rest[:1] == ["launch"] and "--stop" in rest:
         config.forget_launch(runtime)
-        launch_record(resolved_runtime(runtime)).unlink(missing_ok=True)
     return rc
 
 
 def xvfb_runtime() -> Path:
-    """slicer-eval-mcp's own runtime, which holds the Xvfb settings (xvfb_executable, extra_lib_dirs, xvfb_grace_s):
-    config/runtime.local.json when it exists, else config/runtime.json."""
-    local = repo() / "config" / "runtime.local.json"
-    return local if local.exists() else repo() / "config" / "runtime.json"
+    """The runtime that holds the Xvfb settings (xvfb_executable, extra_lib_dirs, xvfb_grace_s): CHD-Bench's
+    config/runtime.local.json when it exists, else config/runtime.json (task.config.runtime_path)."""
+    return config.runtime_path()
+
+
+def xvfb_session_command(inner, python=None) -> list:
+    """`slicer-mcp xvfb-session --runtime <xvfb_runtime> -- <inner>`: inner on its own virtual display."""
+    return [python or sys.executable, *CLI, "xvfb-session", "--runtime", str(xvfb_runtime()), "--", *map(str, inner)]
 
 
 def tools_md() -> str:
@@ -179,14 +130,6 @@ def main(argv=None):
     if not argv or argv[0] in ("-h", "--help"):
         print(__doc__.strip())
         sys.exit(0 if argv else 2)
-    cleanup = argv[0] == "launch" and {"--stop", "--check"} & set(argv)
-    try:
-        check_pin()
-    except SlicerMCPVersionError as e:
-        if not cleanup:
-            print(f"error: {e}", file=sys.stderr)
-            sys.exit(2)
-        print(f"warning: {e}", file=sys.stderr)
     if argv[0] == "tools-md":
         text = tools_md()
         if "--check" in argv:

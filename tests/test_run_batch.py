@@ -100,7 +100,7 @@ def test_plan_prints_and_runs_nothing(tmp_path, capsys):
     assert rb.main(["--config", str(p), "--job", "5", "--plan"]) == 0
     plan = json.loads(capsys.readouterr().out)
     assert plan["runtime"]["bridge_port"] == "auto" and len(plan["episodes"]) == 5
-    assert plan["session"][:3] == ["uv", "run", "python"] and plan["session"][3].endswith("tools/xvfb_session.py")
+    assert plan["session"][:4] == ["uv", "run", "slicer-mcp", "xvfb-session"]
     assert "--inner" in plan["session"] and plan["session"][5] == str(slicer.xvfb_runtime())
     assert plan["runtime"]["cases_dir"] != "c" and Path(plan["runtime"]["traces_dir"]).is_absolute()
     assert not (tmp_path / "out").exists()

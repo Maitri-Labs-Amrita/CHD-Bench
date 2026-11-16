@@ -1,22 +1,20 @@
 #!/usr/bin/env bash
-# Set up CHD-Bench on this machine, right after `git clone` (Linux or macOS, no sudo).
+# Set up CHD-Bench on this machine, right after `git clone` (Linux or macOS, no sudo). Needs uv and git on PATH.
 #
 #   ./setup.sh [--imagechd-dir DIR] [--slicer PATH] [--xvfb PATH] [--lib-dir DIR]... [--shared DIR]
-#              [--check-case ID] [--skip-check] [--no-install-uv]
+#              [--check-case ID] [--skip-check]
 #
-# 1. Prerequisites: git, and uv (installed with its official installer if missing; --no-install-uv stops instead).
-# 2. slicer-eval-mcp: cloned next to CHD-Bench at the commit pinned in src/chd_client/slicer.py (PINNED_COMMIT). An
-#    existing checkout must be at that commit with no uncommitted changes; setup never changes it.
-# 3. uv sync --inexact (the locked versions; uv.lock is not changed; installed extras such as transformers stay).
-# 4. Slicer 5.10.0: --slicer PATH uses an existing one (Linux: with --xvfb PATH and --lib-dir DIR for a headless
-#    install), else the one already in config/runtime.local.json. Else on Linux slicer-eval-mcp's
-#    tools/setup_headless.sh installs Xvfb, Slicer (sha512-checked download) and the missing system libraries
-#    (--shared DIR: into one group folder, so a team installs once). On macOS: /Applications/Slicer.app.
-# 5. ImageCHD: --imagechd-dir DIR, else $CHD_IMAGECHD_DIR, else the config's imagechd_dir, else data/ImageCHD_dataset.
+# 1. Prerequisites: uv (https://docs.astral.sh/uv/) and git (uv fetches slicer-mcp from its git repository).
+# 2. uv sync --frozen --inexact: the locked versions, including slicer-mcp at the commit pyproject.toml pins
+#    ([tool.uv.sources] rev); uv.lock is not changed; installed extras such as transformers stay.
+# 3. Slicer 5.10.0: --slicer PATH uses an existing one (Linux: with --xvfb PATH and --lib-dir DIR for a headless
+#    install), else the one already in config/runtime.local.json. Else on Linux `slicer-mcp setup-headless` installs
+#    Xvfb, Slicer (sha512-checked download) and the missing system libraries (--shared DIR: into one group folder, so
+#    a team installs once). On macOS: /Applications/Slicer.app.
+# 4. ImageCHD: --imagechd-dir DIR, else $CHD_IMAGECHD_DIR, else the config's imagechd_dir, else data/ImageCHD_dataset.
 #    It cannot be downloaded automatically (Kaggle login).
-# 6. config/runtime.local.json of CHD-Bench and of slicer-eval-mcp (gitignored): only the keys setup owns are set;
-#    every other setting already there is kept.
-# 7. The check: ./run.sh --imagechd <case> --labels gt --dry-run-scripted. Slicer starts, prepares an ImageCHD case,
+# 5. config/runtime.local.json (gitignored): only the keys setup owns are set; every other setting there is kept.
+# 6. The check: ./run.sh --imagechd <case> --labels gt --dry-run-scripted. Slicer starts, prepares an ImageCHD case,
 #    runs one scripted episode (no model, no cost) and stops (Linux: on a virtual display). --check-case ID picks the
 #    case (default: the first one); --skip-check skips it.
 #
@@ -24,20 +22,15 @@
 # Exit code: 0 = set up and checked (or --skip-check); 3 = set up, but NOT checked (no ImageCHD data); else failed.
 set -euo pipefail
 
-set -euo pipefail
-
 CHD="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MCP="$(dirname "$CHD")/slicer-eval-mcp"
-MCP_SSH="git@github.com:Maitri-Labs-Amrita/slicer-eval-mcp.git"
-MCP_HTTPS="https://github.com/Maitri-Labs-Amrita/slicer-eval-mcp.git"
 UV_INSTALL='curl -LsSf https://astral.sh/uv/install.sh | sh'
 SLICER_VERSION="5.10.0"
 MAC_SLICER="/Applications/Slicer.app/Contents/MacOS/Slicer"
 CHD_RT="$CHD/config/runtime.local.json"
-MCP_RT="$MCP/config/runtime.local.json"
+HEADLESS_RT="$CHD/data/dev/headless_runtime.json"
 CHECK_LOG="$CHD/data/dev/setup_check.log"
 
-SLICER=""; XVFB=""; LIB_DIRS=(); SHARED=""; IMAGECHD_DIR=""; CHECK_CASE=""; SKIP_CHECK=0; INSTALL_UV=1
+SLICER=""; XVFB=""; LIB_DIRS=(); SHARED=""; IMAGECHD_DIR=""; CHECK_CASE=""; SKIP_CHECK=0
 need() {
   local opt="$1" what="$2"; shift 2
   if [ $# -lt 2 ] || [ -z "$2" ] || [ "${2#--}" != "$2" ]; then
@@ -54,7 +47,6 @@ while [ $# -gt 0 ]; do
     --imagechd-dir) need "$1" "the ImageCHD dataset folder" "$@"; IMAGECHD_DIR="$2"; shift 2 ;;
     --check-case) need "$1" "an ImageCHD case id (e.g. 1001)" "$@"; CHECK_CASE="$2"; shift 2 ;;
     --skip-check) SKIP_CHECK=1; shift ;;
-    --no-install-uv) INSTALL_UV=0; shift ;;
     -h|--help) sed -n '2,/^set -euo pipefail$/{/^set -euo pipefail$/!p;}' "$0"; exit 0 ;;
     *) echo "unknown option: $1 (see ./setup.sh --help)" >&2; exit 2 ;;
   esac
@@ -71,71 +63,29 @@ case "$(uname -s)" in
   *) die "unsupported OS $(uname -s): CHD-Bench runs on Linux or macOS" ;;
 esac
 
-say "1/7 prerequisites"
-command -v git >/dev/null || die "git not found: install git and run ./setup.sh again"
-UV_NOTE="reused"
-if ! command -v uv >/dev/null; then
-  if [ -x "$HOME/.local/bin/uv" ]; then
-    export PATH="$HOME/.local/bin:$PATH"
-    UV_NOTE="reused ~/.local/bin/uv (not on your PATH: add 'export PATH=\$HOME/.local/bin:\$PATH' to your shell profile)"
-  elif [ "$INSTALL_UV" = 0 ]; then
-    die "uv not found. Install it with:  $UV_INSTALL  (then open a new shell and run ./setup.sh again)"
-  else
-    command -v curl >/dev/null || die "uv and curl not found: install uv (https://docs.astral.sh/uv/) and run ./setup.sh again"
-    echo "  uv not found. Installing it with the official installer: $UV_INSTALL"
-    echo "  (it puts uv in ~/.local/bin and adds that folder to PATH in your shell profile; --no-install-uv stops here instead)"
-    sh -c "$UV_INSTALL"
-    export PATH="$HOME/.local/bin:$PATH"
-    command -v uv >/dev/null || die "the uv installer finished, but uv is not in ~/.local/bin: open a new shell and run ./setup.sh again"
-    UV_NOTE="installed (open a new shell so that uv is on your PATH)"
-  fi
-fi
-echo "  ok: git, uv $(uv --version | awk '{print $2}') ($(command -v uv))"
+say "1/6 prerequisites"
+command -v uv >/dev/null || die "uv not found. Install it (https://docs.astral.sh/uv/), e.g.:
+  $UV_INSTALL
+then open a new shell and run ./setup.sh again."
+command -v git >/dev/null || die "git not found (uv needs it to fetch slicer-mcp): install git and run ./setup.sh again"
+echo "  ok: uv $(uv --version | awk '{print $2}') ($(command -v uv)), git"
 
-say "2/7 slicer-eval-mcp (next to CHD-Bench, at the pinned commit)"
-PIN="$(sed -n 's/^PINNED_COMMIT = "\([0-9a-f]\{40\}\)".*/\1/p' "$CHD/src/chd_client/slicer.py")"
-[ -n "$PIN" ] || die "cannot read PINNED_COMMIT from $CHD/src/chd_client/slicer.py"
-if [ -e "$MCP" ]; then
-  [ -d "$MCP/.git" ] || [ -f "$MCP/.git" ] || die "$MCP exists but is not a git checkout: move it away and run ./setup.sh again"
-  HEAD="$(git -C "$MCP" rev-parse HEAD 2>/dev/null || true)"
-  if [ "$HEAD" != "$PIN" ]; then
-    die "$MCP is at ${HEAD:-no commit}, not the pinned $PIN. setup.sh never changes your checkout. Commit or stash your work there, then:
-  git -C $MCP fetch origin && git -C $MCP checkout $PIN
-and run ./setup.sh again."
-  fi
-  DIRTY="$(git -C "$MCP" status --porcelain --untracked-files=all)"
-  if [ -n "$DIRTY" ]; then
-    printf '%s\n' "$DIRTY" | head -10 >&2
-    die "$MCP has uncommitted changes (above); the harness refuses them. Commit, stash or remove them (setup.sh never discards them), then run ./setup.sh again."
-  fi
-  MCP_NOTE="reused $MCP at ${PIN:0:12}"
-  echo "  ok: $MCP at ${PIN:0:12}, clean"
-else
-  echo "  cloning $MCP_SSH -> $MCP"
-  if ! GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=20" git clone -q "$MCP_SSH" "$MCP"; then
-    echo "  ssh clone failed; trying $MCP_HTTPS"
-    git clone -q "$MCP_HTTPS" "$MCP" || die "cannot clone slicer-eval-mcp (ssh and https failed): check your network access to GitHub"
-  fi
-  git -C "$MCP" checkout -q --detach "$PIN" || die "commit $PIN is not in $MCP_SSH"
-  MCP_NOTE="cloned into $MCP at ${PIN:0:12}"
-  echo "  ok: cloned, at ${PIN:0:12}"
-fi
-
-say "3/7 uv sync"
+say "2/6 uv sync (with slicer-mcp at the pinned commit)"
 (cd "$CHD" && uv sync --frozen --inexact) || die "uv sync failed in $CHD (output above)"
-echo "  ok: $CHD/.venv"
+MCP_NOTE="$(helper slicer-mcp)"
+echo "  ok: $CHD/.venv; slicer-mcp $MCP_NOTE"
 
-say "4/7 Slicer $SLICER_VERSION"
+say "3/6 Slicer $SLICER_VERSION"
 [ "$OS" = mac ] && { [ -n "$XVFB" ] || [ -n "${LIB_DIRS[*]:-}" ]; } && echo "  note: --xvfb and --lib-dir are for Linux; ignored on macOS"
 if [ -z "$SLICER" ] && [ -f "$CHD_RT" ]; then
   OLD="$(helper get --path "$CHD_RT" --key slicer_executable)"
   if [ -n "$OLD" ] && [ -x "$OLD" ]; then
     SLICER="$OLD"
     echo "  reusing the Slicer in $CHD_RT"
-    if [ "$OS" = linux ] && [ -f "$MCP_RT" ]; then
-      [ -n "$XVFB" ] || XVFB="$(helper get --path "$MCP_RT" --key xvfb_executable)"
+    if [ "$OS" = linux ]; then
+      [ -n "$XVFB" ] || XVFB="$(helper get --path "$CHD_RT" --key xvfb_executable)"
       [ -n "${LIB_DIRS[*]:-}" ] || while IFS= read -r d; do [ -n "$d" ] && LIB_DIRS+=("$d"); done \
-        < <(helper get --path "$MCP_RT" --key extra_lib_dirs)
+        < <(helper get --path "$CHD_RT" --key extra_lib_dirs)
     fi
   fi
 fi
@@ -152,19 +102,20 @@ elif [ "$OS" = mac ]; then
   SLICER="$MAC_SLICER"
   SLICER_NOTE="reused $SLICER"
 else
-  echo "  no --slicer: running slicer-eval-mcp's tools/setup_headless.sh${SHARED:+ --shared $SHARED}"
+  echo "  no --slicer: running slicer-mcp setup-headless${SHARED:+ --shared $SHARED}"
   echo "  (Xvfb, Slicer $SLICER_VERSION and the missing system libraries; each part is reused when already there)"
-  bash "$MCP/tools/setup_headless.sh" ${SHARED:+--shared "$SHARED"} || die "tools/setup_headless.sh failed (output above)"
-  SLICER="$(helper get --path "$MCP_RT" --key slicer_executable)"
-  XVFB="$(helper get --path "$MCP_RT" --key xvfb_executable)"
-  LIB_DIRS=(); while IFS= read -r d; do [ -n "$d" ] && LIB_DIRS+=("$d"); done < <(helper get --path "$MCP_RT" --key extra_lib_dirs)
-  [ -x "$SLICER" ] || die "setup_headless.sh wrote no usable slicer_executable into $MCP_RT"
-  SLICER_NOTE="headless install by setup_headless.sh: $SLICER"
+  (cd "$CHD" && uv run --no-sync slicer-mcp setup-headless --runtime-out "$HEADLESS_RT" ${SHARED:+--shared "$SHARED"}) \
+    || die "slicer-mcp setup-headless failed (output above)"
+  SLICER="$(helper get --path "$HEADLESS_RT" --key slicer_executable)"
+  XVFB="$(helper get --path "$HEADLESS_RT" --key xvfb_executable)"
+  LIB_DIRS=(); while IFS= read -r d; do [ -n "$d" ] && LIB_DIRS+=("$d"); done < <(helper get --path "$HEADLESS_RT" --key extra_lib_dirs)
+  [ -x "$SLICER" ] || die "slicer-mcp setup-headless wrote no usable slicer_executable into $HEADLESS_RT"
+  SLICER_NOTE="headless install by slicer-mcp setup-headless: $SLICER"
 fi
 if [ "$OS" = linux ]; then
   if [ -z "$XVFB" ]; then
     XVFB="$(command -v Xvfb || true)"
-    [ -n "$XVFB" ] || die "no Xvfb (Linux runs Slicer on a virtual display): pass --xvfb PATH, or run ./setup.sh without --slicer so setup_headless.sh installs Xvfb"
+    [ -n "$XVFB" ] || die "no Xvfb (Linux runs Slicer on a virtual display): pass --xvfb PATH, or run ./setup.sh without --slicer so slicer-mcp setup-headless installs Xvfb"
   fi
   [ -x "$XVFB" ] || die "--xvfb $XVFB: not an executable file"
   XVFB="$(abspath "$XVFB")"
@@ -177,7 +128,7 @@ if [ "$OS" = linux ]; then
 fi
 echo "  ok: $SLICER"
 
-say "5/7 ImageCHD data"
+say "4/6 ImageCHD data"
 DATA_GIVEN="${IMAGECHD_DIR:-${CHD_IMAGECHD_DIR:-}}"
 if [ -z "$DATA_GIVEN" ] && [ -f "$CHD_RT" ]; then
   DATA_GIVEN="$(helper get --path "$CHD_RT" --key imagechd_dir)"
@@ -208,22 +159,19 @@ else
 EOF
 fi
 
-say "6/7 config files"
-LINUX_FLAG=""; [ "$OS" = linux ] && LINUX_FLAG="--linux"
-MCP_ARGS=(--slicer "$SLICER" $LINUX_FLAG)
+say "5/6 config/runtime.local.json"
+CFG_ARGS=(--slicer "$SLICER")
 if [ "$OS" = linux ]; then
-  MCP_ARGS+=(--xvfb "$XVFB")
-  for d in ${LIB_DIRS[@]+"${LIB_DIRS[@]}"}; do MCP_ARGS+=(--lib-dir "$d"); done
+  CFG_ARGS+=(--linux --xvfb "$XVFB")
+  for d in ${LIB_DIRS[@]+"${LIB_DIRS[@]}"}; do CFG_ARGS+=(--lib-dir "$d"); done
 fi
-MCP_CFG="$(helper mcp --path "$MCP_RT" --base "$MCP/config/runtime.json" "${MCP_ARGS[@]}")"
-echo "  $MCP_RT: $MCP_CFG"
-CHD_CFG="$(helper chd --path "$CHD_RT" --base "$CHD/config/runtime.json" --slicer "$SLICER" $LINUX_FLAG \
+CHD_CFG="$(helper chd --path "$CHD_RT" --base "$CHD/config/runtime.json" "${CFG_ARGS[@]}" \
   ${IMAGECHD_KEY:+--imagechd-dir "$IMAGECHD_KEY"})"
 echo "  $CHD_RT: $CHD_CFG"
 
 on_display() {
   if [ "$OS" = linux ]; then
-    (cd "$CHD" && SLICER_MCP_RUNTIME="$CHD_RT" uv run --no-sync python "$MCP/tools/xvfb_session.py" --runtime "$MCP_RT" -- "$@")
+    (cd "$CHD" && SLICER_MCP_RUNTIME="$CHD_RT" uv run --no-sync slicer-mcp xvfb-session --runtime "$CHD_RT" -- "$@")
   else
     (cd "$CHD" && SLICER_MCP_RUNTIME="$CHD_RT" "$@")
   fi
@@ -240,7 +188,7 @@ else
 fi
 echo "  Slicer $VERSION_NOTE"
 
-say "7/7 check: one scripted episode (no model, no cost)"
+say "6/6 check: one scripted episode (no model, no cost)"
 CHECK="" RC=0
 if [ "$SKIP_CHECK" = 1 ]; then
   CHECK="SKIPPED (--skip-check): the setup is NOT verified"
@@ -269,12 +217,10 @@ fi
 cat <<EOF
 
 == Summary
-  uv:              $UV_NOTE
-  slicer-eval-mcp: $MCP_NOTE
+  slicer-mcp:      $MCP_NOTE
   Slicer:          $SLICER_NOTE ($VERSION_NOTE)
   ImageCHD:        $([ "$DATA_OK" = 1 ] && echo "$DATA_DIR ($N_CASES cases)" || echo "NOT FOUND ($DATA_DIR)")
   config:          $CHD_RT ($CHD_CFG)
-                   $MCP_RT ($MCP_CFG)
   check:           $CHECK
 EOF
 if [ "$RC" = 1 ]; then
@@ -302,7 +248,7 @@ A real model calls a paid API. Set its key first: export it, or put KEY=value li
   export OPENROUTER_API_KEY=...
   ./run.sh --imagechd $CASE --labels gt --model 'openrouter:openai/gpt-6-astra'
 Other cases: uv run python -m chd_client.task.imagechd list. On a SLURM cluster, run episodes on a compute node
-(README.md, "Setup in detail").
+(docs/SETUP.md).
 EOF
 else
   cat <<EOF

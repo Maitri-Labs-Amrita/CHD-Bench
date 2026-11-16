@@ -1,17 +1,16 @@
-"""The config steps of ./setup.sh: the two runtime.local.json files, and the ImageCHD data check.
+"""The config steps of ./setup.sh: config/runtime.local.json, and the ImageCHD data check.
 
     python -m chd_client.setup_config chd --path P --base B --slicer S [--imagechd-dir D] [--linux]
-    python -m chd_client.setup_config mcp --path P --base B --slicer S [--xvfb X] [--lib-dir L ...] [--linux]
+                                          [--xvfb X] [--lib-dir L ...]
+    python -m chd_client.setup_config slicer-mcp                   the installed slicer-mcp: version and commit
     python -m chd_client.setup_config get --path P --key K          the key's value ('' when absent; a list: one per line)
     python -m chd_client.setup_config check-data --dir D [--case ID]  the case for the setup check, and the case count
 
-Both runtime files are gitignored and belong to the user. A write starts from the committed runtime.json (`--base`),
-keeps every setting already in the local file, then sets only the keys setup owns:
-- CHD-Bench config/runtime.local.json: slicer_executable; imagechd_dir and imagechd_diagnosis_sheet (when a dataset
-  folder is given); eval_launch.caffeinate false on Linux; bridge_port "auto" only when the local file has no
-  bridge_port (a new file: two users or jobs on one machine do not collide on the committed fixed port).
-- slicer-eval-mcp config/runtime.local.json (its Xvfb settings, read by tools/xvfb_session.py): slicer_executable;
-  on Linux xvfb_executable, extra_lib_dirs and eval_launch.caffeinate false (the keys tools/setup_headless.sh owns).
+The runtime file is gitignored and belongs to the user. A write starts from the committed runtime.json (`--base`),
+keeps every setting already in the local file, then sets only the keys setup owns: slicer_executable; imagechd_dir
+and imagechd_diagnosis_sheet (when a dataset folder is given); on Linux eval_launch.caffeinate false and the Xvfb
+settings that slicer-mcp's xvfb-session reads (xvfb_executable, extra_lib_dirs); bridge_port "auto" only when the
+local file has no bridge_port (a new file: two users or jobs on one machine do not collide on the committed port).
 A file is written only when its content changes (a rerun prints "unchanged"), through a temporary file and a rename.
 """
 
@@ -22,11 +21,8 @@ import sys
 from pathlib import Path
 
 CHD_COMMENT = ("Written by ./setup.sh for this user and machine (gitignored). Setup sets only slicer_executable, "
-               "imagechd_dir, imagechd_diagnosis_sheet, eval_launch.caffeinate (Linux) and bridge_port (when absent); "
-               "every other setting here is yours and is kept.")
-MCP_COMMENT = ("Written by CHD-Bench's ./setup.sh for this user and machine (gitignored). Used via "
-               "tools/xvfb_session.py --runtime config/runtime.local.json. Deployment settings, NOT part of the "
-               "research protocol and not hashed into traces.")
+               "imagechd_dir, imagechd_diagnosis_sheet, eval_launch.caffeinate, xvfb_executable and extra_lib_dirs "
+               "(Linux) and bridge_port (when absent); every other setting here is yours and is kept.")
 
 
 def _merge(old, base) -> dict:
@@ -42,7 +38,8 @@ def _no_caffeinate(rt):
     rt["eval_launch"] = {**(el if isinstance(el, dict) else {}), "caffeinate": False}
 
 
-def chd_runtime(old, base, *, slicer, imagechd_dir=None, diagnosis_sheet=None, linux=False) -> dict:
+def chd_runtime(old, base, *, slicer, imagechd_dir=None, diagnosis_sheet=None, linux=False, xvfb=None,
+                lib_dirs=()) -> dict:
     """CHD-Bench's runtime.local.json content. old: the current local file (None when there is none)."""
     rt = _merge(old, base)
     if old is None:
@@ -55,22 +52,21 @@ def chd_runtime(old, base, *, slicer, imagechd_dir=None, diagnosis_sheet=None, l
         if diagnosis_sheet:
             rt["imagechd_diagnosis_sheet"] = str(diagnosis_sheet)
     if linux:
-        _no_caffeinate(rt)
-    return rt
-
-
-def mcp_runtime(old, base, *, slicer, xvfb=None, lib_dirs=(), linux=False) -> dict:
-    """slicer-eval-mcp's runtime.local.json content (the Xvfb settings live there)."""
-    rt = _merge(old, base)
-    if old is None:
-        rt["_comment"] = MCP_COMMENT
-    rt["slicer_executable"] = str(slicer)
-    if linux:
         if xvfb:
             rt["xvfb_executable"] = str(xvfb)
         rt["extra_lib_dirs"] = [str(d) for d in lib_dirs]
         _no_caffeinate(rt)
     return rt
+
+
+def slicer_mcp_note() -> str:
+    """'0.1.0 at <commit>' for the installed slicer-mcp (chd_client.slicer.source)."""
+    from chd_client import slicer
+    st = slicer.source()
+    where = f"at {st['commit'][:12]}" if st.get("commit") else "(commit unknown)"
+    if st.get("from_checkout"):
+        where += f", from the checkout {st['path']}{' with uncommitted changes' if st.get('dirty') else ''}"
+    return f"{st['version']} {where}"
 
 
 def read_json(path):
@@ -120,17 +116,15 @@ def check_data(root, case=None) -> tuple[int, int]:
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m chd_client.setup_config", description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("chd", "mcp"):
-        s = sub.add_parser(name)
-        s.add_argument("--path", required=True)
-        s.add_argument("--base", required=True)
-        s.add_argument("--slicer", required=True)
-        s.add_argument("--linux", action="store_true")
-        if name == "chd":
-            s.add_argument("--imagechd-dir")
-        else:
-            s.add_argument("--xvfb")
-            s.add_argument("--lib-dir", action="append", default=[])
+    s = sub.add_parser("chd")
+    s.add_argument("--path", required=True)
+    s.add_argument("--base", required=True)
+    s.add_argument("--slicer", required=True)
+    s.add_argument("--linux", action="store_true")
+    s.add_argument("--imagechd-dir")
+    s.add_argument("--xvfb")
+    s.add_argument("--lib-dir", action="append", default=[])
+    sub.add_parser("slicer-mcp")
     g = sub.add_parser("get")
     g.add_argument("--path", required=True)
     g.add_argument("--key", required=True)
@@ -139,6 +133,9 @@ def main(argv=None):
     d.add_argument("--case", type=int)
     a = ap.parse_args(argv)
 
+    if a.cmd == "slicer-mcp":
+        print(slicer_mcp_note())
+        return 0
     if a.cmd == "get":
         v = (read_json(a.path) or {}).get(a.key)
         print("\n".join(map(str, v)) if isinstance(v, list) else ("" if v is None else v))
@@ -152,15 +149,12 @@ def main(argv=None):
         print(case, n)
         return 0
     old, base = read_json(a.path), read_json(a.base)
-    if a.cmd == "chd":
-        sheet = None
-        if a.imagechd_dir:
-            from chd_client.task.imagechd import DIAGNOSIS_INFO
-            sheet = Path(a.imagechd_dir) / DIAGNOSIS_INFO
-        new = chd_runtime(old, base, slicer=a.slicer, imagechd_dir=a.imagechd_dir, diagnosis_sheet=sheet,
-                          linux=a.linux)
-    else:
-        new = mcp_runtime(old, base, slicer=a.slicer, xvfb=a.xvfb, lib_dirs=a.lib_dir, linux=a.linux)
+    sheet = None
+    if a.imagechd_dir:
+        from chd_client.task.imagechd import DIAGNOSIS_INFO
+        sheet = Path(a.imagechd_dir) / DIAGNOSIS_INFO
+    new = chd_runtime(old, base, slicer=a.slicer, imagechd_dir=a.imagechd_dir, diagnosis_sheet=sheet,
+                      linux=a.linux, xvfb=a.xvfb, lib_dirs=a.lib_dir)
     print(write_if_changed(a.path, old, new))
     return 0
 
