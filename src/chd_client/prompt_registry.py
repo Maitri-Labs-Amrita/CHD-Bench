@@ -18,9 +18,11 @@ class PromptRegistryError(ValueError):
 
 ARM = "3d_seg"
 NOMASK_ARM = "3d"
-ARMS = (ARM, NOMASK_ARM)
+NO3D_ARM = "2d_seg"  # 3d_seg without the 3D view or the 3D-only tools (profiles/*_no3d_v1)
+ARMS = (ARM, NOMASK_ARM, NO3D_ARM)
 
-ARM_TOOLSETS = {ARM: "base", NOMASK_ARM: "ct"}
+# base: every tool; ct: base without the segmentation tools; no3d: base without the 3D-only tools
+ARM_TOOLSETS = {ARM: "base", NOMASK_ARM: "ct", NO3D_ARM: "no3d"}
 SERVER_REPORTS = {"diagnosis_normal": "classes_normal"}
 
 

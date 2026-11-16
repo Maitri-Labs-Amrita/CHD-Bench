@@ -118,6 +118,8 @@ class EnvMCP:
         self.runner_only = set()
         self.flags = []
         self.ended = None
+        # views whose frames must never reach the model (the 2d_seg arm: "3d"): one in a result raises EnvironmentAbort
+        self.forbidden_views = ()
 
     async def __aenter__(self):
         self._client = Client(self.target)
@@ -157,9 +159,18 @@ class EnvMCP:
         res = await self._client.call_tool("reset_episode", {"case_id": case_id, "client_meta": client_meta},
                                            meta=None)
         obs = to_observation("reset_episode", res)
+        self._check_views(obs)
         if obs.is_error:
             raise EnvironmentAbort(f"reset_episode refused: {obs.payload.get('error')}")
         return (res.meta or {})[META_EPISODE], obs
+
+    def _check_views(self, obs: Observation) -> None:
+        """Abort (before the observation reaches the model) on a frame of a forbidden view."""
+        bad = [v for v in obs.frames if v in self.forbidden_views]
+        if bad:
+            raise EnvironmentAbort(f"{obs.tool}: the env returned frames {bad} that this arm must never show the "
+                                   f"model (forbidden views {list(self.forbidden_views)}); the server runs the wrong "
+                                   "profile")
 
     async def call(self, name: str, args, reasoning: str | None = None, tokens: dict | None = None) -> Observation:
         if name in self.runner_only:
@@ -172,6 +183,7 @@ class EnvMCP:
             meta[META_TOKENS] = tokens
         res = await self._client.call_tool(name, args if isinstance(args, dict) else {"_raw": args}, meta=meta)
         obs = to_observation(name, res)
+        self._check_views(obs)
         if obs.error_type == "environment":
             raise EnvironmentAbort(f"{name}: {obs.payload['error'].get('message')}")
         return obs

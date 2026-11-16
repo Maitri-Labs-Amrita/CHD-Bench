@@ -26,7 +26,8 @@ from chd_client.task import config
 from chd_client.task.config import PROFILE, resolved_runtime
 
 TOOLS_MD = PROFILE.parents[1] / "docs" / "TOOLS.md"
-PINNED_COMMIT = "cb8f380fddbe60c274cca6e19374ad1d6a594d12"
+# slicer-eval-mcp with observation.views (the 2d_seg arm's profiles); every profile with the 3D view gets the same tools
+PINNED_COMMIT = "7103557fafd9cc5f8eeaec82069fc810363edd44"
 ALLOW_ENV = "CHD_ALLOW_SLICER_MCP_COMMIT"
 TAKES_PROFILE = {"launch", "serve", "case prepare"}
 TAKES_RUNTIME = {"launch", "serve", "case prepare", "case remove"}

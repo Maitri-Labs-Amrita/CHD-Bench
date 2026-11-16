@@ -342,13 +342,16 @@ class Episode:
         return p.read_bytes() if p.is_file() else None
 
     def cover_image(self):
-        """(png bytes, caption): the step-0 3D frame."""
+        """(png bytes, caption): the step-0 3D frame; without one (the 2d_seg arm never captures the 3D view) the step-0
+        axial frame."""
         s0 = self.by_step.get(0)
-        for rel in (s0 or {}).get("frames") or []:
-            if view_name(rel) == "3d":
-                b = self.frame_bytes(rel)
-                if b:
-                    return b, "Step 0 (reset) 3D frame"
+        frames = (s0 or {}).get("frames") or []
+        for view, caption in (("3d", "Step 0 (reset) 3D frame"), ("axial", "Step 0 (reset) axial frame (no 3D view)")):
+            for rel in frames:
+                if view_name(rel) == view:
+                    b = self.frame_bytes(rel)
+                    if b:
+                        return b, caption
         return None, "No 3D image available (no step-0 3D frame)"
 
 

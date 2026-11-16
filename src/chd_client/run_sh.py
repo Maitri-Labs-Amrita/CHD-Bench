@@ -33,8 +33,8 @@ episode succeeded but Slicer did not stop (the stop failed, or it printed "not s
 model that cannot run (a missing key or price, ...); 128 + the signal number when a signal came while Slicer was
 starting, and on Linux also when the run was stopped by a signal (tools/xvfb_session.py).
 --runtime <file> is used for the launch and the stop too. The eval Slicer runs the episode's task profile
-(run_episode.arm_profile: chd_mr_v1 for MRI cases, chd_ct_nomask_v1 for --arm 3d; $CHD_RUN_SH_PROFILE in the episode
-shell).
+(run_episode.arm_profile: chd_mr_v1 for MRI cases, chd_ct_nomask_v1 for --arm 3d, the *_no3d_v1 copy for --arm
+2d_seg; $CHD_RUN_SH_PROFILE in the episode shell).
 --slicer-url is refused: run.sh starts its own Slicer (for a Slicer you started yourself, use `uv run run-episode`).
 """
 

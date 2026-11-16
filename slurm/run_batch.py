@@ -9,7 +9,7 @@ The job index is --job, else $SLURM_ARRAY_TASK_ID (a Slurm array task per job). 
    one <case_id>.nrrd, and the first to finish deletes it) and its own eval-launch state file and log;
 2. re-runs itself under slicer-eval-mcp's tools/xvfb_session.py (a free display number; every process on it is stopped
    when the job ends), starts the eval Slicer there (`chd-slicer launch`, the chd_ct_v1 profile; arm 3d:
-   chd_ct_nomask_v1; HVSMR: chd_mr_v1) and checks it;
+   chd_ct_nomask_v1; HVSMR: chd_mr_v1; arm 2d_seg: the dataset's *_no3d_v1 copy) and checks it;
 3. runs `uv run run-episode --imagechd <id> ...` for each case, one after the other (a failed case is logged and
    the next one runs; a Slicer that died is started again first), each with a time limit;
 4. stops the eval Slicer. Every case appends one line to results.jsonl (case, exit code, wall time, the summary
@@ -20,8 +20,9 @@ needs comes from the provider registry (chd_client.models.registry: the provider
 base_url_env); the job stops before Slicer starts when one is unset. --dry-run-scripted runs the scripted model (no API
 calls) for a plumbing check; --plan prints the job's runtime and commands and runs nothing.
 
-Arms (`arm`): 3d_seg (default; `labels` required: "gt" or a path with {case} / {stem}) or 3d (no mask: the CT only,
-profile chd_ct_nomask_v1; `labels` must be absent or null; dataset imagechd only).
+Arms (`arm`): 3d_seg (default; `labels` required: "gt" or a path with {case} / {stem}), 3d (no mask: the CT only,
+profile chd_ct_nomask_v1; `labels` must be absent or null; dataset imagechd only) or 2d_seg (3d_seg without the 3D view
+or the 3D tools: the dataset's *_no3d_v1 profile; `labels` required, any dataset).
 """
 
 import argparse
@@ -45,7 +46,7 @@ DEFAULTS = {"out_dir": "slurm/batches", "port_base": None, "cost_cap": 8.0, "epi
             "wandb": None,
             "dataset": "imagechd"}
 DATASETS = ("imagechd", "hvsmr")
-ARMS = ("3d_seg", "3d")
+ARMS = ("3d_seg", "3d", "2d_seg")
 NOMASK_ARM = "3d"
 JOB_KEYS = {"name", "model", "effort", "cases", "extra_args"}
 
@@ -90,7 +91,8 @@ def load_config(path) -> dict:
     if not isinstance(c.get("batch"), str) or not c["batch"]:
         raise BatchError("config needs a batch name (`batch`)")
     if c["arm"] not in ARMS:
-        raise BatchError(f"arm {c['arm']!r}: one of {ARMS} (3d_seg: with the segmentation of `labels`; 3d: no mask)")
+        raise BatchError(f"arm {c['arm']!r}: one of {ARMS} (3d_seg: with the segmentation of `labels`; 3d: no mask; "
+                         "2d_seg: the segmentation of `labels`, no 3D view)")
     if c["dataset"] not in DATASETS:
         raise BatchError(f"dataset {c['dataset']!r}: one of {DATASETS}")
     if c["arm"] == NOMASK_ARM:
@@ -183,16 +185,14 @@ def case_stem(config, case) -> str:
 
 
 def slicer_profile(config) -> str | None:
-    """The eval Slicer's profile: the cohort's (HVSMR: chd_mr_v1), arm 3d's (chd_ct_nomask_v1: the profile
-    run-episode serves for that arm, chd_client.run_episode.arm_profile), else None (chd-slicer's chd_ct_v1)."""
-    ds = (config or {}).get("dataset") or "imagechd"
-    if ds == "imagechd" and (config or {}).get("arm") == NOMASK_ARM:
-        from chd_client.task.config import NOMASK_PROFILE
-        return str(NOMASK_PROFILE)
-    if ds == "imagechd":
-        return None
+    """The eval Slicer's profile: the one run-episode serves for the arm and dataset (chd_client.run_episode
+    .arm_profile): the cohort's (HVSMR: chd_mr_v1), arm 3d's (chd_ct_nomask_v1), arm 2d_seg's (the dataset's *_no3d_v1
+    copy), else None (chd-slicer's chd_ct_v1)."""
+    from chd_client.run_episode import arm_profile
     from chd_client.task.cohorts import COHORTS
-    return str(COHORTS[ds].profile)
+    ds = (config or {}).get("dataset") or "imagechd"
+    p = arm_profile((config or {}).get("arm") or "3d_seg", COHORTS.get(ds))
+    return None if p is None else str(p)
 
 
 def slicer_command(runtime_path, action=None, profile=None) -> list:
