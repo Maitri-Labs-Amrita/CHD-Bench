@@ -139,7 +139,7 @@ def test_an_arm_3d_episode_has_no_segmentation_anywhere(tmp_path):
     names = [t.name for t in model.tools]
     assert names == list(load_profile(NOMASK_PROFILE).tools) and not set(SEG_TOOLS) & set(names)
     assert "segment" not in model.system_blocks[0].lower()
-    assert model.system_blocks[0] == render_system(PROMPT_DIR, 70, version=NOMASK)
+    assert model.system_blocks[0] == render_system(PROMPT_DIR, 75, version=NOMASK)
     meta, steps = read_trace(srv.session.trace_dir)
     assert meta["profile"] == "chd_ct_nomask_v1" and "segments_manifest_sha256" not in meta
     assert meta["client_meta"]["arm"] == "3d" and meta["client_meta"]["prompt_version"] == NOMASK

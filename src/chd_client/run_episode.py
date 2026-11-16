@@ -1,6 +1,6 @@
 """Run one episode: one model, one case, one arm, over the environment's MCP server.
 
-    uv run run-episode --imagechd <id> --labels <labels.nii.gz | gt> --model openrouter:<slug> [--max-steps 70]
+    uv run run-episode --imagechd <id> --labels <labels.nii.gz | gt> --model openrouter:<slug> [--max-steps 75]
                        [--cost-cap 3.0] [--effort high] [--runtime runtime.json] [--dry-run-scripted]
     uv run run-episode --imagechd <id> --arm 3d --model openrouter:<slug> [...]        # no mask: the CT only
     uv run run-episode --imagechd <id> --arm 2d_seg --labels <labels> --model ... [...]  # no 3D view or 3D tools
@@ -72,7 +72,7 @@ SEG_TOOLS = tuple(_ENV_SEG_TOOLS)
 THREED_TOOLS = tuple(_ENV_THREED_TOOLS)  # an arm-2d_seg episode refuses a server that offers any
 NO3D_FORBIDDEN_VIEWS = ("3d",)  # an arm-2d_seg episode aborts on any frame of these views
 PROMPT_VERSION = prompt_registry.default_version(PROMPT_DIR)
-DEFAULT_MAX_STEPS = 70
+DEFAULT_MAX_STEPS = 75
 MAX_NUDGES = 3
 OK_STOPS = ("tool_use", "end_turn", "stop_sequence")
 

@@ -34,11 +34,11 @@ def test_tools_filtered_verbatim_and_the_prompt_alone_in_system(tmp_path):
     assert {"reset_episode", "end_episode"} <= runner_only
     for name, t in got.items():
         assert t.description == listed[name].description and t.input_schema == listed[name].input_schema
-    assert model.system_blocks == [render_system(PROMPT_DIR, 70)]
-    assert "{max_steps}" not in model.system_blocks[0] and "at most 70 tool calls" in model.system_blocks[0]
+    assert model.system_blocks == [render_system(PROMPT_DIR, 75)]
+    assert "{max_steps}" not in model.system_blocks[0] and "at most 75 tool calls" in model.system_blocks[0]
     cm = meta["client_meta"]
     assert meta["model"] == {"id": "scripted", "version": "scripted-v1"} and meta["seed"] == 0
-    assert cm["prompt_version"] == "chd_ct_v1" and cm["image_window"] is None and cm["max_steps"] == 70
+    assert cm["prompt_version"] == "chd_ct_v1" and cm["image_window"] is None and cm["max_steps"] == 75
     assert cm["cost_cap_usd"] == 3.0 and {"commit", "dirty"} <= set(cm["client_git"])
     assert len(meta["system_prompt_sha256"]) == 64 and len(cm["server_instructions_sha256"]) == 64
     assert summary["stop_reason"] == "submitted" and meta["status"] == "submitted"
@@ -248,11 +248,11 @@ def test_only_the_3d_seg_and_3d_arms_run(tmp_path, arm):
 
 
 def test_3d_seg_arm_has_its_own_prompt():
-    """The 3d_seg arm gets chd_ct_v1 (70 calls by default): the 16 classes and normal, the base tools only, every
+    """The 3d_seg arm gets chd_ct_v1 (75 calls by default): the 16 classes and normal, the base tools only, every
     placeholder filled."""
-    assert prompt_version() == PROMPT_VERSION == "chd_ct_v1" and default_max_steps() == 70
-    t = render_system(PROMPT_DIR, 70)
-    assert not re.search(r"\{[a-z_]+\}", t) and "at most 70 tool calls" in t
+    assert prompt_version() == PROMPT_VERSION == "chd_ct_v1" and default_max_steps() == 75
+    t = render_system(PROMPT_DIR, 75)
+    assert not re.search(r"\{[a-z_]+\}", t) and "at most 75 tool calls" in t
     order = ["## Role and task", "## The classes", "## The tools", "## The episode", "## Output"]
     assert [t.index(w) for w in order] == sorted(t.index(w) for w in order)
     from chd_client.diagnosis import CLASS_NAMES
