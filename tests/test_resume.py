@@ -169,3 +169,102 @@ def test_a_killed_episode_without_a_summary_is_resumed(tmp_path):
     assert again.stop is None and len(again.turns) == 4
     summary, _, _, _ = episode(tmp_path / "b", TURNS, resume=again)
     assert summary["stop_reason"] == "submitted" and summary["resumed"]["from_stop"] is None
+
+
+# ---------------------------------------------------------------------------------------------- Anthropic (Claude)
+def _wire(messages):
+    """The messages as the anthropic SDK puts them in the request body (an SDK block: only its set fields)."""
+    from anthropic._utils._json import openapi_model_dump
+    return json.loads(json.dumps(messages, default=openapi_model_dump))
+
+
+def _claude_replies():
+    from tests.test_anthropic import message, tool_use
+    return [
+        message([{"type": "thinking", "thinking": "Look at the state first.", "signature": "sig-1"}, tool_use("t1")]),
+        message([{"type": "thinking", "thinking": "", "signature": "sig-2"}, {"type": "text", "text": "Now the 3D view."},
+                 tool_use("t2", "orbit", {"azimuth_deg": 30})]),
+        message([{"type": "redacted_thinking", "data": "enc-3"}, tool_use("t3", "reset_view")]),
+        message([tool_use("t4", "submit_report", {"report": NORMAL})]),
+    ]
+
+
+class _FailingAnthropic:
+    """FakeAnthropic whose replies may be exceptions (raised when their request is sent)."""
+
+    def __new__(cls, replies):
+        from tests.test_anthropic import FakeAnthropic, FakeStream
+        fake = FakeAnthropic(replies)
+
+        def stream(**kw):
+            fake.requests.append(kw)
+            r = fake.responses.pop(0)
+            if isinstance(r, Exception):
+                raise r
+            return FakeStream(r)
+        fake.beta.messages.stream = stream
+        return fake
+
+
+def _claude_episode(tmp_path, replies, resume=None):
+    from chd_client.models.anthropic import AnthropicModel
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    srv, _, traces = make_env(tmp_path)
+    model = AnthropicModel(client=_FailingAnthropic(replies))
+    try:
+        summary = anyio.run(lambda: run_episode(CASE, "3d_seg", model, srv.server, runs_dir=tmp_path / "runs",
+                                                traces_dir=traces, echo=None, make_pdf=False, resume=resume))
+    except RuntimeError as e:
+        if not hasattr(e, "summary"):
+            raise
+        summary = e.summary
+    return summary, model, traces
+
+
+def test_an_anthropic_reply_is_restored_as_it_was_sent():
+    """restore(raw) from the recorded full model_dump (every optional field, null when unset) puts the reply into the
+    history as the live step did: the next request body carries the same blocks, thinking signatures included."""
+    from chd_client.models.anthropic import AnthropicModel
+    from chd_client.run_record import to_jsonable
+    from tests.test_anthropic import TOOLS, FakeAnthropic, obs
+    reply = _claude_replies()[1]
+    live, again = AnthropicModel(client=FakeAnthropic([reply])), AnthropicModel(client=FakeAnthropic([]))
+    for m in (live, again):
+        m.start(["S"], TOOLS, "first", obs(0))
+    turn_live = live.step()
+    raw = to_jsonable(reply)  # what responses.jsonl holds
+    assert raw["content"][2]["caller"] is None  # an unset optional field, recorded as null
+    turn_again = again.restore(raw)
+    assert [(c.id, c.name, c.args, c.reasoning) for c in turn_again.calls] == \
+        [(c.id, c.name, c.args, c.reasoning) for c in turn_live.calls]
+    assert (turn_again.stop, turn_again.usage) == (turn_live.stop, turn_live.usage)
+    live.add_results([(turn_live.calls[0], obs(1))])
+    again.add_results([(turn_again.calls[0], obs(1))])
+    a, b = live.render(), again.render()
+    assert _wire(b["messages"]) == _wire(a["messages"])  # byte for byte what the API received the first time
+    assert _wire(b["messages"])[1]["content"][0] == {"type": "thinking", "thinking": "", "signature": "sig-2"}
+    # the resumed episode lets the API drop a block it cannot bind instead of refusing the request
+    assert "block_binding" not in a["thinking"]
+    assert b["thinking"]["block_binding"] == {"prefix_mismatch_behavior": "drop_block"}
+    assert b["betas"] == ["thinking-binding-controls-2026-08-01"]
+
+
+def test_an_interrupted_claude_episode_resumes_with_the_same_history(tmp_path):
+    replies = _claude_replies()
+    whole, whole_model, _ = _claude_episode(tmp_path / "whole", replies)
+    assert whole["stop_reason"] == "submitted"
+    cut, _, traces = _claude_episode(tmp_path / "a", replies[:2] + [RuntimeError("APIConnectionError")])
+    assert cut["stop_reason"] == "runner_exception" and cut["n_model_turns"] == 2
+    prior = load_prior(tmp_path / "a" / "runs" / cut["episode_id"], traces)
+    assert len(prior.turns) == 2 and all(t["raw"]["type"] == "message" for t in prior.turns)
+    summary, model, _ = _claude_episode(tmp_path / "b", replies[2:], resume=prior)
+    assert summary["stop_reason"] == "submitted" and summary["resumed"]["replayed_turns"] == 2
+    for k in ("n_model_steps", "n_model_turns", "tokens"):
+        assert summary[k] == whole[k], k
+    assert summary["cost_usd"] == pytest.approx(whole["cost_usd"])
+    # the first request after the resume is the one the uninterrupted run sent at that point
+    first, want = model.client.requests[0], whole_model.client.requests[2]
+    assert _wire(first["messages"]) == _wire(want["messages"])
+    assert (first["system"], first["tools"]) == (want["system"], want["tools"])
+    assert first["thinking"]["block_binding"] == {"prefix_mismatch_behavior": "drop_block"}
+    assert len(model.client.requests) == 2  # no request for the replayed turns

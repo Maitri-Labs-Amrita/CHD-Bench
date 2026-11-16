@@ -17,6 +17,8 @@ TOOLS = [ToolDef("get_state", "Return the state.", {"type": "object", "propertie
 
 
 class FakeStream:
+    """A canned reply; an exception in its place breaks the stream after two events (a drop mid-turn)."""
+
     def __init__(self, msg):
         self.msg = msg
 
@@ -25,6 +27,12 @@ class FakeStream:
 
     def __exit__(self, *a):
         return False
+
+    def __iter__(self):
+        yield {"type": "message_start"}
+        yield {"type": "ping"}
+        if isinstance(self.msg, BaseException):
+            raise self.msg
 
     def get_final_message(self):
         return self.msg
@@ -234,3 +242,90 @@ def test_image_window_sets_the_binding_control():
 def test_sonnet_has_a_price():
     from chd_client.models.anthropic import cost_usd
     assert cost_usd("claude-sonnet-5-5", 1_000_000, 1_000_000, 1_000_000, 1_000_000) == pytest.approx(2.0 + 10.0 + 2.5 + 0.1)
+
+
+def _req():
+    import httpx2
+    return httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+
+
+def _drop():
+    """APIConnectionError over a reset, as the SDK raises it ('Connection error.')."""
+    import anthropic
+    import httpx2
+    try:
+        try:
+            raise ConnectionResetError(104, "Connection reset by peer")
+        except ConnectionResetError as low:
+            raise httpx2.ReadError("peer closed connection") from low
+    except httpx2.ReadError as mid:
+        try:
+            raise anthropic.APIConnectionError(request=_req()) from mid
+        except anthropic.APIConnectionError as e:
+            return e
+
+
+def _status(code, body=None):
+    import anthropic
+    import httpx2
+    resp = httpx2.Response(code, request=_req())
+    return anthropic.Anthropic(api_key="test-not-real")._make_status_error(f"error {code}", body=body, response=resp)
+
+
+class Recorder:
+    def __init__(self):
+        self.lines = []
+
+    def request(self, *a, **k):
+        pass
+
+    def response(self, adapter, raw):
+        self.lines.append(raw)
+
+
+def test_a_dropped_stream_is_resent_with_backoff_and_logged(capsys):
+    from chd_client.models.openrouter import RETRY_WAITS_S
+    waits, ok = [], message([tool_use("tu_1")])
+    fake = FakeAnthropic([_drop(), _status(529), ok])
+    m = AnthropicModel(client=fake, sleep=waits.append)
+    m.recorder = Recorder()
+    m.start(["SYS"], TOOLS, "first turn", obs(0))
+    turn = m.step()
+    assert [c.id for c in turn.calls] == ["tu_1"] and waits == list(RETRY_WAITS_S[:2])
+    assert len(fake.requests) == 3 and fake.requests[0] == fake.requests[2]  # the same request, resent
+    assert m.retries == [(1, "APIConnectionError"), (2, "OverloadedError")]
+    fails = [x["failed_attempt"] for x in m.recorder.lines if isinstance(x, dict)]
+    assert [f["attempt"] for f in fails] == [1, 2] and fails[0]["events"] == 2 and fails[1]["status"] == 529
+    assert "ReadError: peer closed connection" in fails[0]["causes"][0]
+    assert "Connection reset by peer" in fails[0]["causes"][1]
+    assert m.recorder.lines[-1] is ok  # then the reply, which resume keeps
+    assert "attempt 1 failed" in capsys.readouterr().err
+    assert m.request_config()["retry_waits_s"] == list(RETRY_WAITS_S)
+
+
+def test_retries_end_and_a_request_error_is_not_retried():
+    import anthropic
+    from chd_client.models.openrouter import RETRY_WAITS_S
+    m = AnthropicModel(client=FakeAnthropic([_drop()] * (len(RETRY_WAITS_S) + 1)), sleep=lambda s: None)
+    m.start(["SYS"], TOOLS, "first turn", obs(0))
+    with pytest.raises(anthropic.APIConnectionError):
+        m.step()
+    for code in (400, 413):
+        fake = FakeAnthropic([_status(code), message([tool_use("tu_1")])])
+        m = AnthropicModel(client=fake, sleep=lambda s: pytest.fail("no retry for a 4xx"))
+        m.start(["SYS"], TOOLS, "first turn", obs(0))
+        with pytest.raises(anthropic.APIStatusError):
+            m.step()
+        assert len(fake.requests) == 1
+
+
+def test_which_errors_are_transient():
+    import httpx
+    import httpx2
+    from chd_client.models.anthropic import _transient
+    assert _transient(_drop()) and _transient(_status(429)) and _transient(_status(500)) and _transient(_status(529))
+    assert _transient(httpx2.RemoteProtocolError("incomplete chunked read")) and _transient(httpx.ReadError("x"))
+    # an `error` event in a 200 stream
+    assert _transient(_status(200, {"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}}))
+    assert not _transient(_status(200, {"type": "error", "error": {"type": "invalid_request_error"}}))
+    assert not _transient(_status(400)) and not _transient(_status(401)) and not _transient(ValueError("x"))

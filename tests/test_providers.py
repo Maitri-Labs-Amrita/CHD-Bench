@@ -44,7 +44,7 @@ EXPECTED_CONFIG = {
                      "timeout_s": 1800.0, "retry_waits_s": RETRY, "stream": False, "base_url": GATEWAY},
     "anthropic": {"model": "claude-opus-5-5", "max_tokens": 32000,
                   "thinking": {"type": "adaptive", "display": "summarized"}, "output_config": {"effort": "medium"},
-                  "tool_choice": {"type": "auto"}, "image_window": None},
+                  "tool_choice": {"type": "auto"}, "image_window": None, "retry_waits_s": RETRY},
 }
 ENV = {"OPENROUTER_API_KEY": "test-not-a-key", "ANTHROPIC_API_KEY": "test-not-a-key", "CHD_LOCAL_BASE_URL": GATEWAY}
 

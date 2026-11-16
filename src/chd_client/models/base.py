@@ -128,8 +128,8 @@ class ModelAdapter(ABC):
     def restore(self, raw) -> "ModelTurn":
         """Resume (chd_client.resume): put a recorded reply into the history as step() would have; nothing is sent."""
         from chd_client.resume import ResumeError
-        raise ResumeError(f"resume is not supported for {type(self).__name__} yet (OpenAI-compatible providers: local, "
-                          "openrouter, openai_compatible; and the scripted model)")
+        raise ResumeError(f"resume is not supported for {type(self).__name__} yet (supported: anthropic, local, "
+                          "openrouter, openai_compatible and the scripted model)")
 
     def add_results(self, results: list):
         self.history.append(("results", list(results)))
