@@ -139,7 +139,8 @@ def load_prior(run_dir, traces_dir=None) -> Prior:
     replies = {}
     for line in _jsonl(d / "responses.jsonl"):
         raw = line.get("raw")
-        if isinstance(raw, dict) and raw.get("choices"):
+        # an OpenAI-compatible reply (choices) or an Anthropic message (type "message")
+        if isinstance(raw, dict) and (raw.get("choices") or raw.get("type") == "message"):
             replies[line.get("turn")] = raw
     for t in turns:
         t["raw"] = replies.get(t["turn"].get("turn"))
