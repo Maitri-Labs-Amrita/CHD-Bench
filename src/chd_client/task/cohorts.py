@@ -59,6 +59,9 @@ IMAGECHD_LABEL_MAP = "1=LV,2=RV,3=LA,4=RA,6=Ao,7=PA"
 
 PROFILES = {"ct": REPO / "profiles" / "chd_ct_v1", "mr": REPO / "profiles" / "chd_mr_v1"}
 PROMPTS = {"ct": "chd_ct_v1", "mr": "chd_mr_v1"}
+# the 2d_seg arm's: each 3d_seg profile and prompt without the 3D view and the 3D-only tools
+NO3D_PROFILES = {"ct": REPO / "profiles" / "chd_ct_no3d_v1", "mr": REPO / "profiles" / "chd_mr_no3d_v1"}
+NO3D_PROMPTS = {"ct": "chd_ct_2dseg_v1", "mr": "chd_mr_2dseg_v1"}
 
 
 class CohortError(ValueError):
@@ -137,6 +140,24 @@ class Cohort:
     @property
     def prompt(self) -> str:
         return PROMPTS[self.modality]
+
+    @property
+    def no3d_profile(self) -> Path:
+        return NO3D_PROFILES[self.modality]
+
+    @property
+    def no3d_prompt(self) -> str:
+        return NO3D_PROMPTS[self.modality]
+
+    def for_arm(self, arm) -> tuple:
+        """(task profile, prompt version) for an arm: 3d_seg's, or the 2d_seg arm's no-3D copies. CohortError for the
+        3d arm, which has no cohort profile (chd_ct_nomask_v1 is CT only)."""
+        from chd_client.prompt_registry import ARM, NO3D_ARM
+        if arm == ARM:
+            return self.profile, self.prompt
+        if arm == NO3D_ARM:
+            return self.no3d_profile, self.no3d_prompt
+        raise CohortError(f"{self.name} has no profile or prompt for arm {arm!r}")
 
     @property
     def classes(self) -> tuple:

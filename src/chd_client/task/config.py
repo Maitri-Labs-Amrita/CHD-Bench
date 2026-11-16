@@ -25,6 +25,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 PROFILE = REPO / "profiles" / "chd_ct_v1"
 NOMASK_PROFILE = REPO / "profiles" / "chd_ct_nomask_v1"
+NO3D_PROFILE = REPO / "profiles" / "chd_ct_no3d_v1"
 DEFAULT_RUNTIME = REPO / "config" / "runtime.json"
 RUNTIME_ENV = "SLICER_MCP_RUNTIME"
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")

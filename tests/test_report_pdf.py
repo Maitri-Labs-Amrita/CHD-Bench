@@ -165,8 +165,16 @@ def test_view_names():
     assert view_name("frames/001_3d_anterior.png") == "3d_anterior" and view_name("frames/000_axial.png") == "axial"
 
 
+def test_the_cover_falls_back_to_the_axial_frame_without_a_3d_view(tmp_path):
+    """The 2d_seg arm never captures the 3D view: the cover is step 0's axial frame."""
+    traces, runs = write_episode(tmp_path, reset_frames=("axial", "sagittal", "coronal"))
+    _, text = pdf_text(render_episode_pdf(E, traces_dir=traces, runs_dir=runs))
+    assert "Step 0 (reset) axial frame (no 3D view)" in text and "No 3D image available" not in text
+
+
 def test_no_cover_image_and_trace_only(tmp_path):
-    traces, runs = write_episode(tmp_path, transcript=False, reset_frames=("axial",))
+    # no 3d or axial frame at step 0, no run dir
+    traces, runs = write_episode(tmp_path, transcript=False, reset_frames=("sagittal",))
     with pytest.raises(FileNotFoundError, match="no run directory"):
         render_episode_pdf(E, traces_dir=traces, runs_dir=runs)
     assert not (runs / E).exists()

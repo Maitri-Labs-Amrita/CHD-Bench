@@ -331,7 +331,7 @@ def test_run_batch_3d_seg_command_is_pinned(tmp_path):
     ({"arm": "3d", "labels": "/m/ct_{case}_pred.nii.gz"}, "remove `labels`"),
     ({"arm": "3d", "dataset": "hvsmr"}, "arm 3d \\(no mask\\) runs dataset imagechd only: hvsmr"),
     ({"arm": "3d_seg", "dataset": "other"}, r"dataset 'other': one of \('imagechd', 'hvsmr'\)"),
-    ({"arm": "2d", "labels": "gt"}, r"arm '2d': one of \('3d_seg', '3d'\)"),
+    ({"arm": "2d", "labels": "gt"}, r"arm '2d': one of \('3d_seg', '3d', '2d_seg'\)"),
     ({"arm": "3d_seg", "labels": None}, "the config needs `labels`"),
 ])
 def test_run_batch_refuses_a_wrong_arm_config(tmp_path, over, msg):

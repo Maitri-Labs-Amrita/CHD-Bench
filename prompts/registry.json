@@ -1,7 +1,8 @@
 {
   "defaults": {
     "3d_seg": "chd_ct_v1",
-    "3d": "chd_ct_nomask_v1"
+    "3d": "chd_ct_nomask_v1",
+    "2d_seg": "chd_ct_2dseg_v1"
   },
   "prompts": [
     {
@@ -36,6 +37,28 @@
       "report_kind": "diagnosis_normal",
       "toolset": "ct",
       "summary": "Cardiac CT with no segmentation and no segmentation tools; 16 ImageCHD defect classes plus normal."
+    },
+    {
+      "version": "chd_ct_2dseg_v1",
+      "file": "chd_ct_2dseg_v1.md",
+      "sha256": "752d92c8c4a5ecbaea4ffaecfa008f7a43c068e2a65aed74b4964cd055d86488",
+      "arms": ["2d_seg"],
+      "modality": "ct",
+      "profile": "profiles/chd_ct_no3d_v1",
+      "report_kind": "diagnosis_normal",
+      "toolset": "no3d",
+      "summary": "chd_ct_v1 without the 3D view: cardiac CT with a preloaded heart segmentation, the three slice views only and no 3D tools; 16 ImageCHD defect classes plus normal."
+    },
+    {
+      "version": "chd_mr_2dseg_v1",
+      "file": "chd_mr_2dseg_v1.md",
+      "sha256": "b58949a9ee0fd76a2e45c0951299cfc6697e40e0f8bdffbfc20bda0fdf7400a8",
+      "arms": ["2d_seg"],
+      "modality": "mr",
+      "profile": "profiles/chd_mr_no3d_v1",
+      "report_kind": "diagnosis_normal",
+      "toolset": "no3d",
+      "summary": "chd_mr_v1 without the 3D view: cardiac MRI with a preloaded heart segmentation, the three slice views only and no 3D tools; 20 HVSMR-2.0 defect classes plus normal."
     }
   ]
 }

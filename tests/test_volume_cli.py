@@ -119,4 +119,5 @@ def test_main_prepares_hvsmr_gt_with_the_hvsmr_cohort(monkeypatch, tmp_path):
         re_mod.main(["--hvsmr", "24", "--labels", "gt", "--dry-run-scripted"])
     assert ex.value.code == 0 and seen["prompt"] == "chd_mr_v1"
     (cohort, n, labels, _), kw = seen["case"]
-    assert cohort is cohorts.HVSMR and n == 24 and labels == "gt" and kw == {"label_map": None}
+    assert cohort is cohorts.HVSMR and n == 24 and labels == "gt" and kw == {"label_map": None,
+                                                                                        "profile": cohorts.HVSMR.profile}

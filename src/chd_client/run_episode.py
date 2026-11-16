@@ -3,8 +3,9 @@
     uv run run-episode --imagechd <id> --labels <labels.nii.gz | gt> --model openrouter:<slug> [--max-steps 70]
                        [--cost-cap 3.0] [--effort high] [--runtime runtime.json] [--dry-run-scripted]
     uv run run-episode --imagechd <id> --arm 3d --model openrouter:<slug> [...]        # no mask: the CT only
+    uv run run-episode --imagechd <id> --arm 2d_seg --labels <labels> --model ... [...]  # no 3D view or 3D tools
 
-Two arms (prompt_registry.ARMS):
+Three arms (prompt_registry.ARMS):
 - 3d_seg (the default): the model classifies the case with a preloaded segmentation. --labels is required: 'gt' or a label map, the segmentation shells it is shown.
 - 3d (the no-mask control): the model sees the CT only, with no segmentation of any kind: the profile
   profiles/chd_ct_nomask_v1 (chd_ct_v1 without the segmentation section and its five tools) and the prompt
@@ -12,6 +13,11 @@ Two arms (prompt_registry.ARMS):
   profile or prompt). The eval Slicer must run the same profile (`chd-slicer launch --profile
   profiles/chd_ct_nomask_v1`; slurm/run_batch.py and ./run.sh do this for arm 3d): slicer-mcp refuses a bridge that
   loaded another protocol.
+- 2d_seg (no 3D view): 3d_seg without the 3D view: the profile chd_ct_no3d_v1 (or chd_mr_no3d_v1 for an MRI), the
+  3d_seg profile with observation.views = the three slice views and without the ten 3D-only tools (slicer-mcp
+  THREED_TOOLS), and the prompt chd_ct_2dseg_v1 (chd_mr_2dseg_v1). --labels is required, as for 3d_seg. The episode
+  refuses a server that offers a 3D tool and aborts on any 3D frame (mcp_session.EnvMCP.forbidden_views), so a 3D
+  image never reaches the model. The eval Slicer must run the same profile (./run.sh and slurm/run_batch.py do this).
 
 --imagechd prepares a temporary case_nii_<hex> case of the public ImageCHD dataset (chd_client.dicom_run), for
 3d_seg with its segmentation shells from --labels: an NRRD that exists only for this episode and is deleted afterwards.
@@ -50,8 +56,9 @@ from chd_client.models.registry import DEFAULT_MODEL
 from chd_client.dicom_run import task_python
 from chd_client.provenance import write_provenance
 from chd_client.run_record import LiveJsonl, RequestRecorder, fsync_tree, write_json_atomic
-from chd_client.task.config import NOMASK_PROFILE
+from chd_client.task.config import NO3D_PROFILE, NOMASK_PROFILE
 from slicer_mcp.tools.registry import SEG_TOOLS as _ENV_SEG_TOOLS
+from slicer_mcp.tools.registry import THREED_TOOLS as _ENV_THREED_TOOLS
 
 CLIENT_REPO = Path(__file__).resolve().parents[2]
 PROMPT_DIR = CLIENT_REPO / "prompts"
@@ -60,7 +67,10 @@ REPORTS_DIR = Path(os.environ["CHD_REPORTS_DIR"]).expanduser() if os.environ.get
     else CLIENT_REPO / "reports"
 ARMS = prompt_registry.ARMS
 NOMASK_ARM = prompt_registry.NOMASK_ARM
+NO3D_ARM = prompt_registry.NO3D_ARM
 SEG_TOOLS = tuple(_ENV_SEG_TOOLS)
+THREED_TOOLS = tuple(_ENV_THREED_TOOLS)  # an arm-2d_seg episode refuses a server that offers any
+NO3D_FORBIDDEN_VIEWS = ("3d",)  # an arm-2d_seg episode aborts on any frame of these views
 PROMPT_VERSION = prompt_registry.default_version(PROMPT_DIR)
 DEFAULT_MAX_STEPS = 70
 MAX_NUDGES = 3
@@ -95,17 +105,27 @@ def render_system(prompt_dir, max_steps: int, image_window=None, version=None, m
 
 def arm_profile(arm, cohort=None):
     """The task profile slicer-mcp serves (and the eval Slicer loads) for an episode: chd_ct_nomask_v1 for the 3d
-    arm, else the cohort's, else None (chd-slicer's default, chd_ct_v1)."""
+    arm; for 2d_seg the cohort's no-3D copy, else chd_ct_no3d_v1; else the cohort's, else None (chd-slicer's default,
+    chd_ct_v1)."""
     if arm == NOMASK_ARM:
         return NOMASK_PROFILE
     if cohort is not None:
-        return cohort.profile
-    return None
+        return cohort.for_arm(arm)[0]
+    return NO3D_PROFILE if arm == NO3D_ARM else None
 
 
 def check_arm_tools(arm, tools) -> None:
     """Refuse an arm-3d episode whose server offers a segmentation tool: it runs a profile with a segmentation (not
-    profiles/chd_ct_nomask_v1), so the model would see one. Checked before the reset (no trace, no model call)."""
+    profiles/chd_ct_nomask_v1), so the model would see one. Refuse an arm-2d_seg episode whose server offers a 3D-only
+    tool: it runs a profile with the 3D view (not a *_no3d_v1 one). Checked before the reset (no trace, no model
+    call)."""
+    if arm == NO3D_ARM:
+        td = [t.name for t in tools if t.name in THREED_TOOLS]
+        if td:
+            raise ValueError(f"arm {arm}: the env server offers the 3D tools {td}, so it runs a profile with the 3D "
+                             "view; serve the dataset's *_no3d_v1 profile for this arm (and launch the eval Slicer "
+                             "with it)")
+        return
     if arm != NOMASK_ARM:
         return
     seg = [t.name for t in tools if t.name in SEG_TOOLS]
@@ -433,6 +453,8 @@ async def _run_episode(case_id, arm, model, target, *, max_steps=None, cost_cap_
     idents, case_identity, recorder, out, ended = IdentityTracker(), None, None, None, None
 
     async with EnvMCP(target) as env:
+        if arm == NO3D_ARM:  # a 3D frame aborts the episode before it reaches the model
+            env.forbidden_views = NO3D_FORBIDDEN_VIEWS
         tools = env.model_tools()
         check_arm_tools(arm, tools)
         instructions = env.instructions or ""
@@ -461,9 +483,10 @@ async def _run_episode(case_id, arm, model, target, *, max_steps=None, cost_cap_
             recorder = RequestRecorder(out)
             model.recorder = recorder
         try:
+            from chd_client.task.cohorts import for_case_source
+            served = arm_profile(arm, for_case_source(case_source)[0])  # the profile this case actually runs
             write_provenance(out, system_text=system_text, tools=tools, model=model, instructions=instructions,
-                             client_meta=client_meta,
-                             **({"profile": arm_profile(arm)} if arm != prompt_registry.ARM else {}))
+                             client_meta=client_meta, **({"profile": served} if served is not None else {}))
         except Exception as e:  # noqa: BLE001
             transcript.append({"kind": "provenance_error", "message": f"{type(e).__name__}: {e}"})
         resume_info = None
@@ -751,12 +774,17 @@ def diagnosis_line(dx: dict) -> str:
 def dry_run_script(arm="3d_seg", report=None, classes=None) -> list:
     """Plumbing check without a model, one call per model turn: point, hide two structures, the slice outlines off,
     orbit; then a normal classes_normal report (every class absent, normal present). The 3d arm
-    (no segmentation tools): point and orbit only."""
+    (no segmentation tools): point and orbit only. The 2d_seg arm (no 3D tools): a slice scroll instead of the orbit,
+    then the calls that return every view or zoom (zoom, bookmark_view, reset_view), so a dry run shows that none of
+    them returns a 3D frame."""
     from chd_client.diagnosis import dry_normal_report
     look = [("point_at", {"view": "axial", "x": 256, "y": 256}), ("set_segment_visibility", {"hide": ["LA", "RA"]}),
             ("set_slice_outlines", {"visible": False}), ("orbit", {"azimuth_deg": 90})]
     if arm == NOMASK_ARM:
         look = [c for c in look if c[0] not in SEG_TOOLS]
+    if arm == NO3D_ARM:
+        look = look[:3] + [("scroll_slice", {"view": "axial", "delta_slices": 5}), ("zoom", {"factor": 1.5}),
+                           ("bookmark_view", {"label": "dry run"}), ("reset_view", {})]
     rep = dry_normal_report(classes) if classes else dry_normal_report()
     return [[c] for c in look] + [[("submit_report", {"report": rep})]]
 
@@ -782,7 +810,7 @@ class PrelaunchError(Exception):
 
 
 class EpisodeParser(argparse.ArgumentParser):
-    """run-episode's parser: --labels is required for the 3d_seg arm only. The arm is read first, so a 3d_seg command
+    """run-episode's parser: --labels is required for the 3d_seg and 2d_seg arms (not the 3d arm). The arm is read first, so a 3d_seg command
     without --labels gets argparse's own "required" error; the 3d arm's refusal of --labels is
     in prelaunch."""
 
@@ -826,11 +854,12 @@ def parser(prog="run-episode") -> argparse.ArgumentParser:
                     help="with a --labels file: label value to structure, e.g. '1=LV,2=RV,3=LA,4=RA,6=Ao,7=PA' "
                          "(default: the dataset's codes; ImageCHD's for --volume)")
     ap.add_argument("--arm", default="3d_seg", choices=ARMS,
-                    help="3d_seg (default: the scan with the segmentation shells of --labels) or 3d (the scan only, "
-                         "no segmentation; CT only, no --labels)")
+                    help="3d_seg (default: the scan with the segmentation shells of --labels), 3d (the scan only, "
+                         "no segmentation; CT only, no --labels) or 2d_seg (3d_seg without the 3D view or the 3D tools: "
+                         "the slice views and the segmentation of --labels)")
     ap.add_argument("--labels", required=True, help="'gt' (the dataset's own segmentation; ImageCHD and HVSMR) or a "
                     "NIfTI label map on the scan's grid: the segmentation shells shown to the model. Required for "
-                    "--arm 3d_seg, refused for --arm 3d")
+                    "--arm 3d_seg and 2d_seg, refused for --arm 3d")
     ap.add_argument("--prompt", metavar="NAME_OR_FILE",
                     help="a prompt name from prompts/registry.json, or the path of your own prompt file (default: "
                          "the dataset's prompt)")
@@ -900,7 +929,7 @@ def prelaunch(a) -> tuple:
         if a.prompt:
             version = a.prompt
         elif coh is not None and a.arm != NOMASK_ARM:
-            version = coh.prompt
+            version = coh.for_arm(a.arm)[1]
         else:
             version = prompt_version(arm=a.arm)
         entry = prompt_registry.entry(PROMPT_DIR, version, a.arm)
@@ -951,7 +980,7 @@ def main(argv=None):
     if coh is not None and coh.key == "custom":
         case_cm = temporary_cohort_case(coh, a.volume, a.labels, a.runtime, label_map=a.label_map, profile=profile)
     elif coh is not None:
-        case_cm = temporary_cohort_case(coh, a.hvsmr, a.labels, a.runtime, label_map=a.label_map)
+        case_cm = temporary_cohort_case(coh, a.hvsmr, a.labels, a.runtime, label_map=a.label_map, profile=profile)
     else:
         case_cm = temporary_imagechd_case(a.imagechd, a.runtime, labels=a.labels, label_map=a.label_map,
                                           **({"profile": profile} if profile is not None else {}))
