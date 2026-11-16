@@ -168,7 +168,7 @@ def test_an_arm_2d_seg_episode_never_sees_the_3d_view(tmp_path, parent, no3d, v3
     summary, srv, fake, _, model = run_no3d(tmp_path, no3d, v_no3d, c.classes if c else None, case_source=src)
     assert summary["stop_reason"] == "submitted" and summary["arm"] == "2d_seg"
     assert [t.name for t in model.tools] == TOOLS_12
-    assert model.system_blocks[0] == render_system(PROMPT_DIR, 70, version=v_no3d)
+    assert model.system_blocks[0] == render_system(PROMPT_DIR, 75, version=v_no3d)
     assert all(o.frames and set(o.frames) <= set(SLICES) for o in model.observations if not o.is_error)
     assert all("3d" not in capture for _, _, capture in fake.calls)
     meta, steps = read_trace(srv.session.trace_dir)
