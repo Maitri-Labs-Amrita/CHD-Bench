@@ -106,7 +106,8 @@ report was accepted.
 
 - `--labels gt` preloads the dataset's own segmentation (ImageCHD and HVSMR). `--labels <file.nii.gz>` preloads any
   label map on the scan's grid, for example a segmentation model's prediction. Its label values are read with the
-  dataset's codes, or with `--label-map`, e.g. `--label-map '1=LV,2=RV,3=LA,4=RA,5=Ao,6=PA'`. The six structures
+  ImageCHD codes (`1=LV,2=RV,3=LA,4=RA,6=Ao,7=PA`) for every dataset, HVSMR included, or with `--label-map`, e.g.
+  `--label-map '1=LV,2=RV,3=LA,4=RA,5=Ao,6=PA'`. The six structures
   LV, RV, LA, RA, Ao and PA are shown; other labels are ignored.
 - For HVSMR, set the data folders in `config/paths.local.json` (same shape as `config/paths.json`):
 

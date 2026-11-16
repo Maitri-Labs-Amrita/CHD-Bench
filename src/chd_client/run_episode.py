@@ -824,7 +824,7 @@ def parser(prog="run-episode") -> argparse.ArgumentParser:
                          "the run is not scored")
     ap.add_argument("--label-map", metavar="MAP",
                     help="with a --labels file: label value to structure, e.g. '1=LV,2=RV,3=LA,4=RA,6=Ao,7=PA' "
-                         "(default: the dataset's codes; ImageCHD's for --volume)")
+                         "(default: the ImageCHD codes, also for HVSMR and --volume)")
     ap.add_argument("--arm", default="3d_seg", choices=ARMS,
                     help="3d_seg (default: the scan with the segmentation shells of --labels) or 3d (the scan only, "
                          "no segmentation; CT only, no --labels)")

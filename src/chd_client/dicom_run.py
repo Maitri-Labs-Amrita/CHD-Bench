@@ -278,9 +278,11 @@ def cohort_prepare_args(cohort, n, labels, workdir, label_map=None, profile=None
         lab = cohort.gt_labels(n) if labels == "gt" else Path(labels).expanduser().resolve()
         if not lab.is_file():
             raise DicomRunError(f"label map not found: {lab}")
-        args += ["--labels", lab, "--label-map", label_map or cohort.label_map]
-        extra.update(shell_source="gt" if labels == "gt" else "label_map", labels_file=str(lab),
-                     label_map=label_map or cohort.label_map)
+        # the dataset's own segmentation (gt) has the dataset's codes; a label map file (e.g. an nnU-Net prediction)
+        # has the ImageCHD codes, as the segmentation models are trained on them
+        label_map = label_map or (cohort.label_map if labels == "gt" else IMAGECHD_LABEL_MAP)
+        args += ["--labels", lab, "--label-map", label_map]
+        extra.update(shell_source="gt" if labels == "gt" else "label_map", labels_file=str(lab), label_map=label_map)
     args += ["--case-key", case_key(base, labels, cohort.gt_labels(n) if labels == "gt" else None)]
     return args, extra
 
