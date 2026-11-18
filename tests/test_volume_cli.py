@@ -57,8 +57,8 @@ def test_truth_is_parsed_against_the_modalitys_classes():
     (["--volume", "/s.nii.gz", "--labels", "gt"], "--volume has no ground-truth segmentation"),
     (["--imagechd", "1008", "--modality", "mr", "--labels", "gt"], "--modality and --truth go with --volume"),
     (["--hvsmr", "24", "--truth", "normal", "--labels", "gt"], "--modality and --truth go with --volume"),
-    (["--imagechd", "1008", "--labels", "gt", "--label-map", "1=LV"], "--label-map goes with a --labels file"),
-    (["--volume", "/s.nii.gz", "--arm", "3d", "--labels", "/m.nii.gz"], "leave out --labels"),
+    (["--imagechd", "1008", "--labels", "gt", "--label-map", "1=LV"], "--segmentation-map goes with a --segmentation file"),
+    (["--volume", "/s.nii.gz", "--arm", "3d", "--labels", "/m.nii.gz"], "leave out --segmentation"),
 ])
 def test_prelaunch_refuses_a_wrong_volume_command(argv, msg):
     with pytest.raises(re_mod.PrelaunchError, match=msg):

@@ -52,8 +52,8 @@ pin): `uv pip install -e ../slicer-eval-mcp`, then run commands with `uv run --n
 ```bash
 uv run slicer-mcp xvfb-session --runtime config/runtime.local.json -- bash
 uv run chd-slicer launch --no-main-window
-uv run run-episode --imagechd 1001 --labels gt --dry-run-scripted
-uv run run-episode --imagechd 1002 --labels gt --dry-run-scripted
+uv run run-episode --imagechd 1001 --segmentation gt --dry-run-scripted
+uv run run-episode --imagechd 1002 --segmentation gt --dry-run-scripted
 uv run chd-slicer launch --stop
 ```
 

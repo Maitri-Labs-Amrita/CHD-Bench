@@ -259,14 +259,14 @@ def test_cli_3d_seg_serves_the_default_profile_with_labels(monkeypatch, tmp_path
 
 @pytest.mark.parametrize("argv, msg", [
     (["--imagechd", "1008", "--arm", "3d", "--labels", "gt"], "--arm 3d shows the model the scan only.*leave out "
-                                                              "--labels gt"),
+                                                              "--segmentation gt"),
     (["--hvsmr", "24", "--arm", "3d"], "--arm 3d \\(no mask\\) is for CT only: use --imagechd or --volume with "
                                       "--modality ct"),
     (["--volume", "/x.nii.gz", "--modality", "mr", "--arm", "3d"], "--arm 3d \\(no mask\\) is for CT only"),
     (["--imagechd", "1008", "--arm", "3d", "--prompt", CT], "is for the 3d_seg arm, not 3d"),
     (["--imagechd", "1008", "--arm", "3d_seg", "--labels", "gt", "--prompt", NOMASK], "is for the 3d arm, not 3d_seg"),
-    (["--imagechd", "1008", "--arm", "3d_seg"], "this setup shows the model a segmentation: add --labels gt"),
-    (["--hvsmr", "24"], "this MRI scan has no segmentation: add --labels gt"),
+    (["--imagechd", "1008", "--arm", "3d_seg"], "this setup shows the model a segmentation: add --segmentation gt"),
+    (["--hvsmr", "24"], "this MRI scan has no segmentation: add --segmentation gt"),
     (["--volume", "/x.nii.gz", "--modality", "mr"], "this MRI scan has no segmentation"),
 ])
 def test_cli_refuses_a_wrong_arm_combination(argv, msg, capsys):
@@ -294,7 +294,7 @@ def test_an_imagechd_case_for_arm_3d_is_prepared_without_shells(tmp_path):
     args, extra = dicom_run.imagechd_prepare_args(1008, root, None, profile=NOMASK_PROFILE)
     assert "--labels" not in args and "--label-map" not in args
     assert args[args.index("--profile") + 1] == NOMASK_PROFILE and "shell_source" not in extra
-    with pytest.raises(dicom_run.DicomRunError, match="chd_ct_nomask_v1 has no segmentation.*leave --labels out"):
+    with pytest.raises(dicom_run.DicomRunError, match="chd_ct_nomask_v1 has no segmentation.*leave --segmentation out"):
         dicom_run.imagechd_prepare_args(1008, root, "gt", profile=NOMASK_PROFILE)
     seg_args, _ = dicom_run.imagechd_prepare_args(1008, root, "gt")
     assert "--profile" not in seg_args and "--labels" in seg_args
@@ -418,7 +418,7 @@ def test_run_sh_launches_the_eval_slicer_with_the_arm_3d_profile(tmp_path, monke
     env, _ = run_sh.prepare(["--imagechd", "1", "--labels", "gt", "--dry-run-scripted"],
                             {"PATH": "/bin", run_sh.PROFILE_ENV: "stale"}, env_path=tmp_path / "none")
     assert run_sh.PROFILE_ENV not in env
-    with pytest.raises(run_sh.RunShError, match="leave out --labels"):
+    with pytest.raises(run_sh.RunShError, match="leave out --segmentation"):
         run_sh.prepare(["--imagechd", "1", "--arm", "3d", "--labels", "gt", "--dry-run-scripted"], {"PATH": "/bin"},
                        env_path=tmp_path / "none")
 

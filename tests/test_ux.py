@@ -44,7 +44,7 @@ def plan(argv, **kw):
 def test_own_scan_without_labels_or_truth_warns_about_both_and_about_privacy(tmp_path):
     text, warns = plan(["--volume", str(ct(tmp_path)), "--model", ARGON])
     assert "Segmentation  none" in text and "Truth         not given" in text and f"{ARGON} (paid API)" in text
-    assert "No segmentation (--labels)" in warns and "No true diagnosis (--truth): the run is not scored" in warns
+    assert "No segmentation (--segmentation)" in warns and "No true diagnosis (--truth): the run is not scored" in warns
     assert "Images of your scan are sent to OpenRouter. Use de-identified scans only" in warns
 
 
@@ -53,7 +53,7 @@ def test_a_scored_own_scan_shows_the_truth_in_words(tmp_path):
     text, warns = plan(["--volume", str(s), "--labels", str(seg(tmp_path, [1, 2, 3, 4, 6, 7])), "--truth", "vsd",
                         "TOF", "--dry-run-scripted"])
     assert "Ventricular septal defect, Tetralogy of Fallot (--truth)" in text
-    assert "Label values  1=LV, 2=RV, 3=LA, 4=RA, 6=Ao, 7=PA (ImageCHD codes, the default)" in text
+    assert "Structures    1=LV, 2=RV, 3=LA, 4=RA, 6=Ao, 7=PA (ImageCHD values, the default)" in text
     assert "none: scripted test (--dry-run-scripted)" in text and warns == ""
 
 
@@ -61,7 +61,7 @@ def test_label_values_that_do_not_match_the_map_are_flagged(tmp_path):
     s = ct(tmp_path)
     hvsmr_coded = str(seg(tmp_path, [1, 2, 3, 4, 5, 6]))
     _, warns = plan(["--volume", str(s), "--labels", hvsmr_coded, "--dry-run-scripted"])
-    assert "the label map expects 7 (PA), which the file does not have" in warns and "--label-map" in warns
+    assert "the label map expects 7 (PA), which the file does not have" in warns and "--segmentation-map" in warns
     _, warns = plan(["--volume", str(s), "--labels", hvsmr_coded, "--label-map", "1=LV,2=RV,3=LA,4=RA,5=Ao,6=PA",
                      "--dry-run-scripted"])
     assert "label map" not in warns
@@ -192,3 +192,14 @@ def test_list_says_plainly_when_a_dataset_is_not_set_up(tmp_path, monkeypatch, c
     assert "HVSMR-2.0 is not set up on this machine" in err and "./setup.sh --hvsmr-dir" in err
     assert "ImageCHD is not set up on this machine" in err and "./setup.sh --imagechd-dir" in err
     assert "Errno" not in err
+
+
+def test_segmentation_is_the_option_name_and_labels_still_works():
+    new = parser().parse_args(["--imagechd", "1", "--segmentation", "gt"])
+    old = parser().parse_args(["--imagechd", "1", "--labels", "gt"])
+    assert new.labels == old.labels == "gt" and new.arm == old.arm == "3d_seg"
+    m = parser().parse_args(["--volume", "s.nii.gz", "--segmentation", "m.nii.gz", "--segmentation-map", "1=LV"])
+    assert m.label_map == "1=LV" and parser().parse_args(["--volume", "s", "--label-map", "1=LV"]).label_map == "1=LV"
+    shown = parser(prog="./run.sh").format_help()
+    assert "--segmentation gt|FILE" in shown and "--segmentation-map MAP" in shown
+    assert "--labels" not in shown and "--label-map" not in shown

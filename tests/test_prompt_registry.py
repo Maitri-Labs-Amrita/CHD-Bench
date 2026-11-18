@@ -110,7 +110,7 @@ def test_cli_accepts_a_prompt_file(tmp_path):
 @pytest.mark.parametrize("argv,msg", [
     (["--prompt", "system_nope"], "unknown prompt 'system_nope'"),
     (["--arm", "2d"], "invalid choice: '2d'"),
-    (["--arm", "3d"], "leave out --labels gt"),
+    (["--arm", "3d"], "leave out --segmentation gt"),
     (["--prompt", NOMASK], f"prompt {NOMASK} is for the 3d arm, not 3d_seg"),
     (["--prompt", MR], f"prompt {MR} is written for profiles/chd_mr_v1, but this case runs chd_ct_v1"),
 ])

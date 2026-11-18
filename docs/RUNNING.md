@@ -20,12 +20,14 @@ it started, also after an error or Ctrl-C. It refuses `--slicer-url`: for a Slic
 | `--volume SCAN` | any 3D scan: a NIfTI file (`.nii`, `.nii.gz`; used as it is), or a DICOM folder, a DICOM file or another image file (NRRD, MHA, ...), converted to NIfTI first. A folder is searched with every folder under it (other files, such as label maps, are ignored); with several DICOM series it uses the one with the most files; CT comes out in HU; the converted file holds no patient fields and is deleted after the run |
 | `--modality ct\|mr` | with `--volume`: `ct` (values in HU; `chd_ct_v1`) or `mr` (rescaled so the 99.5th percentile is 1000; `chd_mr_v1`). Default `ct`; for a DICOM scan, run.sh takes it from the DICOM header (Modality MR adds `--modality mr`) |
 | `--truth CODE ...` | with `--volume`: the true diagnosis as class codes from `config/chd_classes.csv` (`./run.sh --list classes`), separated by spaces or commas, any case, e.g. `--truth VSD ToF`; or `--truth normal`. The codes never equal a segmentation structure name (`PA` is the pulmonary artery; pulmonary atresia is `PuA`). Without `--truth` the run is not scored and the RESULT box shows the model's diagnosis only |
-| `--labels gt\|FILE` | `gt` (the dataset's own segmentation) or a NIfTI label map on the scan's grid. Leave it out to run on the scan alone (CT only). Before Slicer starts, run.sh checks the file: its values against the label map, and its grid against the scan's |
-| `--label-map MAP` | with a `--labels` file: label value to structure, e.g. `'1=LV,2=RV,3=LA,4=RA,6=Ao,7=PA'` (default: the ImageCHD codes, also for HVSMR and `--volume`) |
-| `--no-3d` | slices only: no 3D view and no 3D tools (rotate, cut away). Needs `--labels` |
+| `--segmentation gt\|FILE` | `gt` (the dataset's own segmentation) or a NIfTI label map on the scan's grid. Leave it out to run on the scan alone (CT only). Before Slicer starts, run.sh checks the file: its values against the label map, and its grid against the scan's |
+| `--segmentation-map MAP` | with a `--segmentation` file: label value to structure, e.g. `'1=LV,2=RV,3=LA,4=RA,6=Ao,7=PA'` (default: the ImageCHD codes, also for HVSMR and `--volume`) |
+| `--no-3d` | slices only: no 3D view and no 3D tools (rotate, cut away). Needs `--segmentation` |
 
-What the model gets: with `--labels`, the scan, the segmentation and the 3D view (the full setup); without
-`--labels`, the scan and the 3D view, no segmentation (CT only); with `--labels --no-3d`, the scan and the
+`--labels` and `--label-map`, the old names of `--segmentation` and `--segmentation-map`, still work.
+
+What the model gets: with `--segmentation`, the scan, the segmentation and the 3D view (the full setup); without
+`--segmentation`, the scan and the 3D view, no segmentation (CT only); with `--segmentation --no-3d`, the scan and the
 segmentation in the slices only. Batch configs ([slurm/README.md](../slurm/README.md)) name these setups with an
 `arm` key.
 
@@ -40,7 +42,7 @@ The default prompts are in `prompts/` and listed in `prompts/registry.json` with
 |---|---|
 | `chd_ct_v1` | CT with a segmentation (ImageCHD classes) |
 | `chd_mr_v1` | MRI with a segmentation (HVSMR-2.0 classes) |
-| `chd_ct_nomask_v1` | CT without a segmentation (no `--labels`) |
+| `chd_ct_nomask_v1` | CT without a segmentation (no `--segmentation`) |
 | `chd_ct_2dseg_v1`, `chd_mr_2dseg_v1` | CT / MRI with a segmentation and no 3D view (`--no-3d`) |
 
 `--prompt <name or file>` uses another registered prompt or your own file. Your text is used as written;

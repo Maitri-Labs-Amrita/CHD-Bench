@@ -1,14 +1,14 @@
 """./run.sh: one CHD episode with one command. It starts the eval Slicer, runs the episode and always stops Slicer.
 
-    ./run.sh --imagechd <ID> | --hvsmr <N> | --volume <SCAN> [--labels ...] [--model <MODEL>] [any run-episode option]
+    ./run.sh --imagechd <ID> | --hvsmr <N> | --volume <SCAN> [--segmentation ...] [--model <MODEL>] [any run-episode option]
 
 run-episode's options: uv run run-episode --help.
 
 Examples (from the CHD-Bench folder; pick a case with `uv run python -m chd_client.task.imagechd list`):
 
-    ./run.sh --imagechd 1001 --labels gt --dry-run-scripted                      # no model, no cost
-    ./run.sh --imagechd 1001 --labels gt --model claude-opus-5-5                 # needs ANTHROPIC_API_KEY (or SDK auth)
-    ./run.sh --imagechd 1001 --labels gt --model 'openrouter:openai/gpt-6-astra' # needs OPENROUTER_API_KEY
+    ./run.sh --imagechd 1001 --segmentation gt --dry-run-scripted                      # no model, no cost
+    ./run.sh --imagechd 1001 --segmentation gt --model claude-opus-5-5                 # needs ANTHROPIC_API_KEY (or SDK auth)
+    ./run.sh --imagechd 1001 --segmentation gt --model 'openrouter:openai/gpt-6-astra' # needs OPENROUTER_API_KEY
 
 What it does:
 1. Reads the API keys from .env in the CHD-Bench folder (KEY=value lines; gitignored), when the file exists. A
@@ -303,7 +303,7 @@ def list_things(what) -> int:
         print(f"{'case':<6}diagnosis (class codes: ./run.sh --list classes)")
         for n, dx in rows:
             print(f"{n:<6}{dx}")
-        print(f"{len(rows)} cases (use: ./run.sh --hvsmr N --labels gt ...)")
+        print(f"{len(rows)} cases (use: ./run.sh --hvsmr N --segmentation gt ...)")
         return 0
     if what == "classes":
         from chd_client.chd_classes import MANIFEST, SEGMENT_NAMES, load

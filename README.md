@@ -51,9 +51,9 @@ own licences.
 ## 3. Run
 
 ```bash
-./run.sh --imagechd 1001 --labels gt --dry-run-scripted                          # free test, no model
-./run.sh --imagechd 1001 --labels gt --model openrouter:google/gemini-4-argon   # ImageCHD case 1001 (CT)
-./run.sh --hvsmr 3 --labels gt --model claude-opus-5-5                           # HVSMR-2.0 case 3 (MRI)
+./run.sh --imagechd 1001 --segmentation gt --dry-run-scripted                          # free test, no model
+./run.sh --imagechd 1001 --segmentation gt --model openrouter:google/gemini-4-argon   # ImageCHD case 1001 (CT)
+./run.sh --hvsmr 3 --segmentation gt --model claude-opus-5-5                           # HVSMR-2.0 case 3 (MRI)
 ```
 
 A model's API key goes in `.env` in the CHD-Bench folder (gitignored), one `NAME=value` line:
@@ -82,7 +82,7 @@ A run stops at $3 (`--cost-cap`) or 75 steps (`--max-steps`).
 | a DICOM folder | `--volume <folder>`. Searched at any depth; other files are ignored; with several series, the one with the most files is used |
 | a NIfTI, NRRD or MHA file | `--volume <file>` |
 | an MRI | `--modality mr` (a DICOM scan's modality is read from its header) |
-| a heart segmentation of the scan | `--labels <file>` ([below](#the-segmentation-file)) |
+| a heart segmentation of the scan | `--segmentation <file>` ([below](#the-segmentation-file)) |
 | the known diagnosis | `--truth VSD ToF`, or `--truth normal` ([class codes](#class-codes)). Without `--truth` the run is not scored |
 
 The model provider receives images of the scan: use de-identified scans only. CHD-Bench drops the DICOM patient
@@ -92,17 +92,17 @@ fields, but not text burned into the images.
 
 | Options | The model gets |
 |---|---|
-| `--labels` | the scan, the segmentation as 3D shells, the 3D view and the slices |
-| no `--labels` | the scan, the 3D view and the slices; no segmentation (CT only) |
-| `--labels --no-3d` | the scan and the segmentation in the slices; no 3D view or 3D tools |
+| `--segmentation` | the scan, the segmentation as 3D shells, the 3D view and the slices |
+| no `--segmentation` | the scan, the 3D view and the slices; no segmentation (CT only) |
+| `--segmentation --no-3d` | the scan and the segmentation in the slices; no 3D view or 3D tools |
 
-For ImageCHD and HVSMR-2.0, `--labels gt` is the dataset's own segmentation.
+For ImageCHD and HVSMR-2.0, `--segmentation gt` is the dataset's own segmentation.
 
 ### The segmentation file
 
 - One NIfTI label map on the scan's grid (same size; made on this scan).
 - Default values, ImageCHD's: 1 LV, 2 RV, 3 LA, 4 RA, 6 Ao, 7 PA (5, the myocardium, is not shown). For other
-  values, `--label-map`, e.g. HVSMR's: `--label-map 1=LV,2=RV,3=LA,4=RA,5=Ao,6=PA`.
+  values, `--segmentation-map`, e.g. HVSMR's: `--segmentation-map 1=LV,2=RV,3=LA,4=RA,5=Ao,6=PA`.
 - With a DICOM folder as `--volume`, the segmentation must be on the grid of the converted scan. If it was made on a
   NIfTI copy of the scan, give that NIfTI as `--volume`.
 
@@ -140,7 +140,7 @@ Terminal 2 (the model name is `local:` plus the profile's `name`):
 
 ```bash
 echo 'CHD_LOCAL_BASE_URL=http://127.0.0.1:8098/v1' >> .env
-./run.sh --imagechd 1001 --labels gt --model local:qwen2.5-vl-3b
+./run.sh --imagechd 1001 --segmentation gt --model local:qwen2.5-vl-3b
 ```
 
 Other models, vLLM, SLURM GPU jobs and remote servers: [docs/GATEWAY.md](docs/GATEWAY.md).

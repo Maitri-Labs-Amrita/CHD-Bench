@@ -38,7 +38,7 @@ Terminal 2, in the CHD-Bench folder, on the same host: one CHD episode with this
 ```bash
 export CHD_LOCAL_BASE_URL=http://127.0.0.1:8098/v1
 CASE=1001   # a case id from: uv run python -m chd_client.task.imagechd list
-./run.sh --imagechd "$CASE" --labels gt --model local:qwen2.5-vl-3b
+./run.sh --imagechd "$CASE" --segmentation gt --model local:qwen2.5-vl-3b
 ```
 
 This profile takes at most 16 images per request (`capabilities.max_images`), and one tool call returns up to 4

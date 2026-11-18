@@ -71,7 +71,7 @@ Terminal 2 (the model name is `local:` plus the profile's `name`):
 
 ```bash
 export CHD_LOCAL_BASE_URL=http://127.0.0.1:8098/v1
-./run.sh --imagechd 1001 --labels gt --model local:qwen2.5-vl-3b
+./run.sh --imagechd 1001 --segmentation gt --model local:qwen2.5-vl-3b
 ```
 
 Everything else (profiles, remote access, SLURM): [GATEWAY.md](GATEWAY.md).

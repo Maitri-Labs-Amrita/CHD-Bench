@@ -20,7 +20,7 @@
 #    HVSMR-2.0 (optional, MRI): --hvsmr-dir DIR (the folder with orig/ and hvsmr_clinical.csv) is checked and saved
 #    in config/paths.local.json. Neither dataset is needed to run your own scans (./run.sh --volume ...).
 # 5. config/runtime.local.json (gitignored): only the keys setup owns are set; every other setting there is kept.
-# 6. The check: ./run.sh --imagechd <case> --labels gt --dry-run-scripted. Slicer starts, prepares an ImageCHD case,
+# 6. The check: ./run.sh --imagechd <case> --segmentation gt --dry-run-scripted. Slicer starts, prepares an ImageCHD case,
 #    runs one scripted episode (no model, no cost) and stops (Linux: on a virtual display). --check-case ID picks the
 #    case (default: the first one); --skip-check skips it.
 #
@@ -281,10 +281,10 @@ elif [ "$DATA_OK" = 0 ]; then
   RC=3
 else
   mkdir -p "$(dirname "$CHECK_LOG")"
-  echo "  ./run.sh --imagechd $CASE --labels gt --dry-run-scripted; output also in $CHECK_LOG (takes a few minutes)"
+  echo "  ./run.sh --imagechd $CASE --segmentation gt --dry-run-scripted; output also in $CHECK_LOG (takes a few minutes)"
   set +e
   (cd "$CHD" && SLICER_MCP_RUNTIME="$CHD_RT" ${TO:+${TO/timeout/timeout --foreground} 1800} ./run.sh --imagechd "$CASE" \
-    --labels gt --dry-run-scripted) 2>&1 | tee "$CHECK_LOG"
+    --segmentation gt --dry-run-scripted) 2>&1 | tee "$CHECK_LOG"
   ERC=${PIPESTATUS[0]}
   set -e
   RUN_DIR="$(grep -o 'reports/runs/[^ ]*' "$CHECK_LOG" | tail -1 || true)"
@@ -340,8 +340,8 @@ echo
 echo "Next, from $CHD (every option: ./run.sh --help; every situation: README.md):"
 if [ "$DATA_OK" = 1 ]; then
   echo "  ./run.sh --list imagechd                                   the cases and their diagnoses"
-  echo "  ./run.sh --imagechd $CASE --labels gt --dry-run-scripted        a test run, no model"
-  echo "  ./run.sh --imagechd $CASE --labels gt --model claude-opus-5-5   with a model"
+  echo "  ./run.sh --imagechd $CASE --segmentation gt --dry-run-scripted        a test run, no model"
+  echo "  ./run.sh --imagechd $CASE --segmentation gt --model claude-opus-5-5   with a model"
 fi
 echo "  ./run.sh --volume /path/to/scan_or_dicom_folder --model M  your own scan"
 echo "  ./run.sh --list classes                                    the class codes for --truth"

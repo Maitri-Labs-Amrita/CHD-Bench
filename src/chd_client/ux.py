@@ -290,8 +290,8 @@ def _scan_file(a) -> Path | None:
 
 
 def label_check(a, dicom=None) -> tuple[list, list, str | None]:
-    """(plan rows, warnings, error) for a --labels file: its values against the label map, its grid against the
-    scan's. Nothing for --labels gt or no --labels."""
+    """(plan rows, warnings, error) for a --segmentation file: its values against the label map, its grid against the
+    scan's. Nothing for --segmentation gt or no --segmentation."""
     if a.labels in (None, "gt"):
         return [], [], None
     import numpy as np
@@ -299,7 +299,7 @@ def label_check(a, dicom=None) -> tuple[list, list, str | None]:
     from chd_client.task.cohorts import IMAGECHD_LABEL_MAP
     lab = Path(a.labels).expanduser()
     if not lab.is_file():
-        return [], [], f"the segmentation file {a.labels} does not exist. Check the path after --labels"
+        return [], [], f"the segmentation file {a.labels} does not exist. Check the path after --segmentation"
     try:
         img = sitk.ReadImage(str(lab))
     except RuntimeError as e:
@@ -311,11 +311,11 @@ def label_check(a, dicom=None) -> tuple[list, list, str | None]:
     try:
         mapping = {int(k): v.strip() for k, v in (part.split("=") for part in text.split(","))}
     except ValueError:
-        return [], [], (f"--label-map {text!r} is not in the form value=structure,..., e.g. "
+        return [], [], (f"--segmentation-map {text!r} is not in the form value=structure,..., e.g. "
                         "1=LV,2=RV,3=LA,4=RA,6=Ao,7=PA")
     rows, warns = [], []
     shown = ", ".join(f"{v}={n}" for v, n in sorted(mapping.items()))
-    rows.append(("Label values", f"{shown} ({'ImageCHD codes, the default' if default else 'from --label-map'})"))
+    rows.append(("Structures", f"{shown} ({'ImageCHD values, the default' if default else 'from --segmentation-map'})"))
     if not found:
         return rows, warns, f"the segmentation file {a.labels} has no labelled voxels (all values are 0)"
     # ImageCHD's own files also hold 5 (myocardium) and, in some cases, 14 (airway): known, not shown
@@ -330,7 +330,7 @@ def label_check(a, dicom=None) -> tuple[list, list, str | None]:
             parts.append("the label map expects " + ", ".join(f"{v} ({mapping[v]})" for v in absent) +
                          ", which the file does not have")
         warns.append("The segmentation does not match the label map: " + "; ".join(parts) + ". If the file uses "
-                     "other codes, pass --label-map (HVSMR's codes: --label-map 1=LV,2=RV,3=LA,4=RA,5=Ao,6=PA).")
+                     "other values, pass --segmentation-map (HVSMR's: --segmentation-map 1=LV,2=RV,3=LA,4=RA,5=Ao,6=PA).")
     if dicom is not None:
         warns.append("The segmentation must be on the voxel grid of the scan as CHD-Bench converts it from DICOM. "
                      "If it was made on a NIfTI copy of this scan, give that NIfTI file as --volume instead.")
@@ -403,8 +403,8 @@ def run_plan(a, dicom=None, modality_note=None) -> tuple[list[str], list[str]]:
         warn.append(w)
     if a.arm == NOMASK_ARM:
         rows.append(("Segmentation", "none"))
-        warn.append("No segmentation (--labels): the model gets the scan alone. Add --labels gt (dataset scans) "
-                    "or --labels <file>.")
+        warn.append("No segmentation (--segmentation): the model gets the scan alone. Add --segmentation gt (dataset scans) "
+                    "or --segmentation <file>.")
     else:
         seg = "the dataset's own" if a.labels == "gt" else f"{a.labels}"
         rows.append(("Segmentation", seg))

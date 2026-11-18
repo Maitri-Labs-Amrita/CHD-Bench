@@ -1,26 +1,26 @@
 """Run one episode: one model, one case, one arm, over the environment's MCP server.
 
-    uv run run-episode --imagechd <id> --labels <labels.nii.gz | gt> --model openrouter:<slug> [--max-steps 75]
+    uv run run-episode --imagechd <id> --segmentation <labels.nii.gz | gt> --model openrouter:<slug> [--max-steps 75]
                        [--cost-cap 3.0] [--effort high] [--runtime runtime.json] [--dry-run-scripted]
     uv run run-episode --imagechd <id> --arm 3d --model openrouter:<slug> [...]        # no mask: the CT only
-    uv run run-episode --imagechd <id> --arm 2d_seg --labels <labels> --model ... [...]  # no 3D view or 3D tools
+    uv run run-episode --imagechd <id> --arm 2d_seg --segmentation <labels> --model ... [...]  # no 3D view or 3D tools
 
 Three arms (prompt_registry.ARMS):
-- 3d_seg (the default): the model classifies the case with a preloaded segmentation. --labels is required: 'gt' or a label map, the segmentation shells it is shown.
+- 3d_seg (the default): the model classifies the case with a preloaded segmentation. --segmentation is required: 'gt' or a label map, the segmentation shells it is shown.
 - 3d (the no-mask control): the model sees the CT only, with no segmentation of any kind: the profile
   profiles/chd_ct_nomask_v1 (chd_ct_v1 without the segmentation section and its five tools) and the prompt
-  chd_ct_nomask_v1. --labels is refused. CT only (--imagechd, or --volume with --modality ct; an MRI has no no-mask
+  chd_ct_nomask_v1. --segmentation is refused. CT only (--imagechd, or --volume with --modality ct; an MRI has no no-mask
   profile or prompt). The eval Slicer must run the same profile (`chd-slicer launch --profile
   profiles/chd_ct_nomask_v1`; slurm/run_batch.py and ./run.sh do this for arm 3d): slicer-mcp refuses a bridge that
   loaded another protocol.
 - 2d_seg (no 3D view): 3d_seg without the 3D view: the profile chd_ct_no3d_v1 (or chd_mr_no3d_v1 for an MRI), the
   3d_seg profile with observation.views = the three slice views and without the ten 3D-only tools (slicer-mcp
-  THREED_TOOLS), and the prompt chd_ct_2dseg_v1 (chd_mr_2dseg_v1). --labels is required, as for 3d_seg. The episode
+  THREED_TOOLS), and the prompt chd_ct_2dseg_v1 (chd_mr_2dseg_v1). --segmentation is required, as for 3d_seg. The episode
   refuses a server that offers a 3D tool and aborts on any 3D frame (mcp_session.EnvMCP.forbidden_views), so a 3D
   image never reaches the model. The eval Slicer must run the same profile (./run.sh and slurm/run_batch.py do this).
 
 --imagechd prepares a temporary case_nii_<hex> case of the public ImageCHD dataset (chd_client.dicom_run), for
-3d_seg with its segmentation shells from --labels: an NRRD that exists only for this episode and is deleted afterwards.
+3d_seg with its segmentation shells from --segmentation: an NRRD that exists only for this episode and is deleted afterwards.
 
 The server runs as a stdio subprocess for the episode. The model sees the system prompt (the server's instructions are
 not sent), the arm's tools (runner-only ones removed) and the reset observation; never the case id or the
@@ -825,10 +825,10 @@ class PrelaunchError(Exception):
 
 class EpisodeParser(argparse.ArgumentParser):
     """run-episode's parser. The arm (the viewing setup; an internal name, never shown to people) follows the
-    options: --labels gives 3d_seg (the scan, the segmentation and the 3D view), no --labels gives 3d (the scan and
+    options: --segmentation gives 3d_seg (the scan, the segmentation and the 3D view), no --segmentation gives 3d (the scan and
     the 3D view, CT only), --no-3d gives 2d_seg (slices and the segmentation, no 3D view). --arm (hidden; batch
     scripts) sets it directly. arm_auto records that it was chosen from the options. prelaunch refuses a setup that
-    needs --labels without it, and the no-segmentation setup on an MRI scan."""
+    needs --segmentation without it, and the no-segmentation setup on an MRI scan."""
 
     def parse_known_args(self, args=None, namespace=None):
         a, rest = super().parse_known_args(args, namespace)
@@ -866,19 +866,19 @@ defects it sees. Every option below has a default except the scan."""
 
 HELP_EPILOG = """\
 examples:
-  ./run.sh --imagechd 1001 --labels gt --dry-run-scripted          test run, no model
-  ./run.sh --imagechd 1001 --labels gt --model claude-opus-5-5     ImageCHD case 1001 with Claude Opus
-  ./run.sh --hvsmr 3 --labels gt --model openrouter:google/gemini-4-argon   HVSMR-2.0 case 3 through OpenRouter
+  ./run.sh --imagechd 1001 --segmentation gt --dry-run-scripted          test run, no model
+  ./run.sh --imagechd 1001 --segmentation gt --model claude-opus-5-5     ImageCHD case 1001 with Claude Opus
+  ./run.sh --hvsmr 3 --segmentation gt --model openrouter:google/gemini-4-argon   HVSMR-2.0 case 3 through OpenRouter
   ./run.sh --volume ~/scans/patient7 --model openrouter:google/gemini-4-argon
                                                                    your own scan (a DICOM folder), no score
-  ./run.sh --volume scan.nii.gz --labels seg.nii.gz --truth VSD ToF --model claude-opus-5-5
+  ./run.sh --volume scan.nii.gz --segmentation seg.nii.gz --truth VSD ToF --model claude-opus-5-5
                                                                    your own scan with its segmentation, scored
-  ./run.sh --imagechd 1001 --labels gt --no-3d --model claude-opus-5-5   slices only, no 3D view
+  ./run.sh --imagechd 1001 --segmentation gt --no-3d --model claude-opus-5-5   slices only, no 3D view
 
 what the model gets:
-  with --labels              the scan, the segmentation and the 3D view
-  without --labels           the scan and the 3D view (CT only)
-  with --labels --no-3d      the scan and the segmentation, slices only
+  with --segmentation              the scan, the segmentation and the 3D view
+  without --segmentation           the scan and the 3D view (CT only)
+  with --segmentation --no-3d      the scan and the segmentation, slices only
 
 more: README.md (setup, data, your own scans, your own GPU), docs/RUNNING.md, docs/MODELS.md"""
 
@@ -902,15 +902,17 @@ def parser(prog="run-episode") -> argparse.ArgumentParser:
                    help="with --volume: ct (default) or mr. ./run.sh reads it from a DICOM header")
 
     g = ap.add_argument_group("what the model sees")
-    g.add_argument("--labels", default=None, metavar="gt|FILE",
+    g.add_argument("--segmentation", dest="labels", default=None, metavar="gt|FILE",
                    help="the heart segmentation shown to the model (LV, RV, LA, RA, Ao, PA): gt (the dataset's "
                         "own) or a NIfTI label map on the scan's grid. Without it, the model gets the scan alone "
                         "(CT only)")
-    g.add_argument("--label-map", metavar="MAP",
-                   help="with a --labels file: which label value is which structure, e.g. "
-                        "1=LV,2=RV,3=LA,4=RA,6=Ao,7=PA (the default: ImageCHD's codes). Other values are not shown")
+    g.add_argument("--labels", dest="labels", default=None, help=argparse.SUPPRESS)  # the old name (batch configs)
+    g.add_argument("--segmentation-map", dest="label_map", metavar="MAP",
+                   help="with a --segmentation file: which label value is which structure, e.g. "
+                        "1=LV,2=RV,3=LA,4=RA,6=Ao,7=PA (the default: ImageCHD's values). Other values are not shown")
+    g.add_argument("--label-map", dest="label_map", help=argparse.SUPPRESS)  # the old name
     g.add_argument("--no-3d", action="store_true",
-                   help="slices only: no 3D view and no 3D tools (rotate, cut away). Needs --labels")
+                   help="slices only: no 3D view and no 3D tools (rotate, cut away). Needs --segmentation")
     g.add_argument("--arm", default=None, choices=ARMS, help=argparse.SUPPRESS)
 
     g = ap.add_argument_group("the true diagnosis (to score the run)")
@@ -980,23 +982,23 @@ def prelaunch(a) -> tuple:
     if not custom and (a.truth is not None or a.modality != "ct"):
         raise PrelaunchError("--modality and --truth go with --volume")
     if a.label_map is not None and (a.labels in (None, "gt")):
-        raise PrelaunchError("--label-map goes with a --labels file")
+        raise PrelaunchError("--segmentation-map goes with a --segmentation file")
     if a.arm != NOMASK_ARM and a.labels is None:
         what = "slices only (--no-3d) also shows" if a.arm == NO3D_ARM else "this setup shows"
-        raise PrelaunchError(f"{what} the model a segmentation: add --labels gt (the dataset's own) or --labels "
-                             "<label-map file>")
+        raise PrelaunchError(f"{what} the model a segmentation: add --segmentation gt (the dataset's own) or --segmentation "
+                             "<file>")
     if a.arm == NOMASK_ARM:
         if coh is not None and coh.modality != "ct" and getattr(a, "arm_auto", False):
-            raise PrelaunchError("this MRI scan has no segmentation: add --labels gt (HVSMR) or --labels <label-map "
-                                 "file>. Running on the scan alone (no --labels) works for CT only")
+            raise PrelaunchError("this MRI scan has no segmentation: add --segmentation gt (HVSMR) or --segmentation <label-map "
+                                 "file>. Running on the scan alone (no --segmentation) works for CT only")
         if a.labels is not None:
             raise PrelaunchError(f"--arm {NOMASK_ARM} shows the model the scan only, with no segmentation: leave out "
-                                 f"--labels {a.labels} (the segmentation shells are for --arm 3d_seg)")
+                                 f"--segmentation {a.labels} (the segmentation shells are for --arm 3d_seg)")
         if coh is not None and (coh.modality != "ct"):
             raise PrelaunchError(f"--arm {NOMASK_ARM} (no mask) is for CT only: use --imagechd or --volume with "
                                  "--modality ct")
     if custom and a.labels == "gt":
-        raise PrelaunchError("--volume has no ground-truth segmentation: pass --labels <label map file>")
+        raise PrelaunchError("--volume has no ground-truth segmentation: pass --segmentation <file>")
     try:
         if a.prompt:
             version = a.prompt

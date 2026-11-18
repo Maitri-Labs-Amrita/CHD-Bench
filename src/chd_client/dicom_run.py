@@ -3,7 +3,7 @@
 `temporary_imagechd_case` converts a case of the public ImageCHD dataset with `slicer-mcp case prepare --volume`
 (a headless Slicer, ~20 s; case id case_nii_<hex> from the key imagechd:<id>). The ImageCHD rules are its arguments
 (task.imagechd): the spacing from the image-info sheet, values stored as HU + 1024, the LPS-identity
-header, and the 3d_seg segmentation shells from --labels with the ImageCHD label codes (the 3d arm: no --labels, no
+header, and the 3d_seg segmentation shells from --segmentation with the ImageCHD label codes (the 3d arm: no --segmentation, no
 shells, under the profile chd_ct_nomask_v1). It writes a temporary copy of the
 runtime.json (paths made absolute) for the server. The episode then runs on it. On
 exit (also after an error) the case's files and the temporary folder are deleted. Traces and runs/<E>/ are kept as
@@ -161,7 +161,7 @@ def imagechd_prepare_args(imagechd_id, dataset_dir=None, labels=None, runtime=No
     n = int(imagechd_id)
     if labels and profile is not None and not _has_segmentation(profile):
         raise DicomRunError(f"profile {Path(profile).name} has no segmentation, so the case takes no labels "
-                            f"(--labels {labels}): leave --labels out, or use the 3d_seg arm's profile")
+                            f"(--segmentation {labels}): leave --segmentation out")
     root = Path(dataset_dir).expanduser().resolve() if dataset_dir else imagechd.dataset_dir(runtime).resolve()
     if not root.is_dir():
         raise DicomRunError(f"ImageCHD folder not found: {root} (runtime.json imagechd_dir)")
@@ -182,7 +182,7 @@ def imagechd_prepare_args(imagechd_id, dataset_dir=None, labels=None, runtime=No
     if labels:
         lab = label if labels == "gt" else Path(labels).expanduser().resolve()
         if labels != "gt" and not (lab.name.endswith(".nii") or lab.name.endswith(".nii.gz")):
-            raise DicomRunError(f"--labels must be 'gt' or a .nii/.nii.gz file: {labels}")
+            raise DicomRunError(f"--segmentation must be 'gt' or a NIfTI file (.nii, .nii.gz): {labels}")
         if not lab.is_file():
             raise DicomRunError(f"label map not found: {lab}")
         args += ["--labels", lab, "--label-map", label_map or IMAGECHD_LABEL_MAP]
