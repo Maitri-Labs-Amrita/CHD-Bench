@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Set up CHD-Bench on this machine, right after `git clone` (Linux or macOS, no sudo). Needs uv and git on PATH.
+# Set up CHD-Bench on this machine (Linux or macOS, no sudo). Needs uv on PATH, and git when pyproject.toml fetches
+# slicer-mcp from a git repository (not when it is a folder, as in a release archive).
 #
 #   ./setup.sh [--imagechd-dir DIR] [--hvsmr-dir DIR] [--slicer PATH] [--xvfb PATH] [--lib-dir DIR]...
 #              [--shared DIR] [--check-case ID] [--skip-check]
@@ -104,13 +105,17 @@ command -v uv >/dev/null || die "uv (the Python package manager that installs ev
 Install it with:
   $UV_INSTALL
 then run ./setup.sh again (open a new terminal first if the uv command is still not found)."
-command -v git >/dev/null || die "git is not installed (uv needs it to fetch slicer-mcp from GitHub). Install it:
+GIT_NOTE=""
+if grep -Eq '^[^#]*\{ *git *=' "$CHD/pyproject.toml"; then   # slicer-mcp from a git repository: uv needs git
+  command -v git >/dev/null || die "git is not installed (uv needs it to fetch slicer-mcp from GitHub). Install it:
   Ubuntu or Debian: sudo apt install git
   macOS:            xcode-select --install
 then run ./setup.sh again."
-echo "  ok: uv $(uv --version | awk '{print $2}') ($(command -v uv)), git"
+  GIT_NOTE=", git"
+fi
+echo "  ok: uv $(uv --version | awk '{print $2}') ($(command -v uv))$GIT_NOTE"
 
-say "2/6 uv sync (with slicer-mcp at the pinned commit)"
+say "2/6 Python environment, with slicer-mcp"
 (cd "$CHD" && uv sync --frozen --inexact) || die "uv sync failed in $CHD (output above)"
 MCP_NOTE="$(helper slicer-mcp)"
 echo "  ok: $CHD/.venv; slicer-mcp $MCP_NOTE"

@@ -483,3 +483,28 @@ def test_gateway_default_port_is_the_one_the_docs_and_errors_use(monkeypatch):
     for doc in ("docs/GATEWAY.md",):
         text = (REPO / doc).read_text()
         assert "127.0.0.1:8098/v1" in text and "127.0.0.1:8000" not in text, doc
+
+
+@pytest.mark.parametrize("source, needs_git", [
+    ('slicer-mcp = { git = "https://example.org/slicer-eval-mcp", rev = "abc" }', True),
+    ('slicer-mcp = { path = "../slicer-eval-mcp", editable = true }', False),
+])
+def test_setup_needs_git_only_for_a_git_source(tmp_path, source, needs_git):
+    """A release archive installs slicer-mcp from a folder next to CHD-Bench, so setup must not ask for git there."""
+    import shutil
+    (tmp_path / "setup.sh").write_text((REPO / "setup.sh").read_text())
+    (tmp_path / "pyproject.toml").write_text(f"[tool.uv.sources]\n{source}\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for tool in ("dirname", "uname", "awk", "grep"):
+        (bin_dir / tool).symlink_to(shutil.which(tool))
+    uv = bin_dir / "uv"
+    uv.write_text('#!/bin/sh\n[ "$1" = --version ] && { echo "uv 0.0.0"; exit 0; }\nexit 9\n')  # sync fails
+    uv.chmod(0o755)
+    p = subprocess.run([shutil.which("bash"), str(tmp_path / "setup.sh")], capture_output=True, text=True,
+                       timeout=30, env={"PATH": str(bin_dir), "HOME": str(tmp_path)})
+    if needs_git:
+        assert "git is not installed" in p.stderr and "2/6" not in p.stdout
+    else:
+        assert "git is not installed" not in p.stderr and "2/6 Python environment" in p.stdout
+        assert "uv sync failed" in p.stderr
