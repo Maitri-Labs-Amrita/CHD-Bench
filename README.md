@@ -39,7 +39,8 @@ cd CHD-Bench
   `imageCHD_dataset_diagnosis_info(updated20210510).xlsx` in one folder.
 - **HVSMR-2.0** (MRI; Pace et al., Scientific Data 2024; [paper](https://doi.org/10.1038/s41597-024-03469-9)): set
   its folders in `config/paths.local.json` (same shape as `config/paths.json`).
-- **Your own scan**: any 3D CT or MRI as NIfTI, a DICOM folder or file, NRRD or MHA. A scan that is not NIfTI is
+- **Your own scan**: any 3D CT or MRI as NIfTI, a DICOM file or any folder that holds DICOM files (searched to
+  any depth), NRRD or MHA. A scan that is not NIfTI is
   converted to NIfTI automatically before the run (`converting DICOM to NIfTI: ...`).
 
 ## Quick start

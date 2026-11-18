@@ -267,37 +267,41 @@ def scan_name(path) -> str:
     return name
 
 
-def _dicom_series_files(folder, want_file=None):
-    """(uid, files, n_series) of the DICOM series in folder: the series that holds want_file, else the one with the
-    most files. ([], 0) when the folder holds no DICOM series."""
+def _dicom_series_files(folder, want_file=None, recursive=False):
+    """(uid, files, n_series) of the DICOM series in folder (and every folder under it when recursive): the series
+    that holds want_file, else the one with the most files. (None, [], 0) when there is no DICOM series."""
+    import os
     import SimpleITK as sitk
     reader = sitk.ImageSeriesReader()
-    series = reader.GetGDCMSeriesIDs(str(folder)) or ()
-    files = {uid: reader.GetGDCMSeriesFileNames(str(folder), uid) for uid in series}
+    dirs = sorted(d for d, _, fs in os.walk(folder) if fs) if recursive else [str(folder)]
+    files = {}
+    for d in dirs:
+        for uid in reader.GetGDCMSeriesIDs(d) or ():
+            files.setdefault(uid, []).extend(reader.GetGDCMSeriesFileNames(d, uid))
     if want_file is not None:
         want = str(Path(want_file).resolve())
         uid = next((u for u, fs in files.items() if want in (str(Path(f).resolve()) for f in fs)), None)
         if uid is not None:
-            return uid, files[uid], len(series)
+            return uid, files[uid], len(files)
     if not files:
         return None, [], 0
     uid = max(files, key=lambda u: len(files[u]))
-    return uid, files[uid], len(series)
+    return uid, files[uid], len(files)
 
 
 def to_nifti(src, out, echo=print) -> dict:
     """Convert a scan that is not NIfTI to the NIfTI file out with SimpleITK, and return what was converted.
-    src is a DICOM folder (the series with the most files), one DICOM file (its whole series, from its folder) or
+    src is a folder (every DICOM series in it and in the folders under it: the one with the most files), one DICOM file (its whole series, from its folder) or
     any other image file SimpleITK reads (NRRD, MHA/MHD, ...). DICOM rescale slope and intercept are applied, so a
     CT comes out in HU. The NIfTI holds the voxels and the geometry only: no patient fields."""
     import SimpleITK as sitk
     src = Path(src)
     info = {}
     if src.is_dir():
-        uid, files, n_series = _dicom_series_files(src)
+        uid, files, n_series = _dicom_series_files(src, recursive=True)
         if not files:
-            raise DicomRunError(f"--volume {src}: a folder with no DICOM series in it (give a NIfTI file, another "
-                                "image file or a DICOM folder)")
+            raise DicomRunError(f"--volume {src}: no DICOM series in this folder or any folder under it (give a "
+                                "NIfTI file, another image file or a DICOM folder)")
     else:
         try:
             kind = sitk.ImageFileReader.GetImageIOFromFileName(str(src))
@@ -312,7 +316,8 @@ def to_nifti(src, out, echo=print) -> dict:
         more = f"; {n_series} series in the folder, using the one with {'this file' if src.is_file() else 'the most files'}" \
             if n_series > 1 else ""
         if echo:
-            echo(f"converting DICOM to NIfTI: {src} ({len(files)} files{more}) ...")
+            where = Path(files[0]).parent
+            echo(f"converting DICOM to NIfTI: {where} ({len(files)} files{more}) ...")
         reader = sitk.ImageSeriesReader()
         reader.SetFileNames(files)
         info.update(source_format="dicom", dicom_series=uid, dicom_n_series=n_series, dicom_n_files=len(files))

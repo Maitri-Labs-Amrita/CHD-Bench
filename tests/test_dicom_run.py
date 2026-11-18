@@ -441,7 +441,17 @@ import numpy as np  # noqa: E402 (the DICOM conversion tests)
 
 
 def write_dicom_series(folder, values, spacing=(0.5, 0.6, 1.25), origin=(-10.0, 20.0, 30.0), uid="1.2.826.0.1.3680043.2.1125.1"):
-    """A DICOM CT series of values (z, y, x; HU, stored as signed 16 bit), one file per slice."""
+    """A DICOM CT series of values (z, y, x; HU, stored as signed 16 bit), one file per slice. GDCM's writer sets
+    the C locale (Python's text files would then default to ASCII in later tests), so the locale is restored."""
+    import locale
+    saved = locale.setlocale(locale.LC_ALL)
+    try:
+        return _write_dicom_series(folder, values, spacing, origin, uid)
+    finally:
+        locale.setlocale(locale.LC_ALL, saved)
+
+
+def _write_dicom_series(folder, values, spacing, origin, uid):
     import SimpleITK as sitk
     folder.mkdir(parents=True, exist_ok=True)
     w = sitk.ImageFileWriter()
@@ -516,3 +526,26 @@ def test_a_folder_without_dicom_is_refused(tmp_path):
     (tmp_path / "empty").mkdir()
     with pytest.raises(dicom_run.DicomRunError, match="no DICOM series"):
         dicom_run.cohort_prepare_args(cohorts.custom("ct"), str(tmp_path / "empty"), None, tmp_path, echo=None)
+
+
+def test_a_dicom_conversion_keeps_the_process_locale(tmp_path):
+    import locale
+    from chd_client.task import cohorts
+    before = locale.setlocale(locale.LC_ALL)
+    src = write_dicom_series(tmp_path / "ct", hu_volume())
+    dicom_run.cohort_prepare_args(cohorts.custom("ct"), str(src), None, tmp_path, echo=None)
+    assert locale.setlocale(locale.LC_ALL) == before
+
+
+def test_a_dicom_series_deep_in_a_folder_is_found(tmp_path):
+    from chd_client.task import cohorts
+    case = tmp_path / "patient"
+    write_dicom_series(case / "study" / "series_a", hu_volume())
+    write_dicom_series(case / "study" / "scout", hu_volume()[:2], uid="1.2.3.4.2")
+    (case / "labels").mkdir()
+    write_volume(case / "labels" / "seg.nii.gz")
+    (case / "notes.txt").write_text("not an image")
+    said = []
+    args, extra = dicom_run.cohort_prepare_args(cohorts.custom("ct"), str(case), None, tmp_path, echo=said.append)
+    assert extra["dicom_n_files"] == 5 and extra["dicom_n_series"] == 2 and extra["name"] == "patient"
+    assert "series_a" in said[0] and "using the one with the most files" in said[0]
