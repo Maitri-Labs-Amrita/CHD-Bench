@@ -402,12 +402,12 @@ def run_plan(a, dicom=None, modality_note=None) -> tuple[list[str], list[str]]:
     if w:
         warn.append(w)
     if a.arm == NOMASK_ARM:
-        rows.append(("Segmentation", "none: the model sees the scan only"))
-        warn.append("No segmentation (--labels not given): the model sees the raw scan only, with no heart "
-                    "structures outlined. Add --labels gt (dataset scans) or --labels <file> to give it one.")
+        rows.append(("Segmentation", "none"))
+        warn.append("No segmentation (--labels): the model gets the scan alone. Add --labels gt (dataset scans) "
+                    "or --labels <file>.")
     else:
         seg = "the dataset's own" if a.labels == "gt" else f"{a.labels}"
-        rows.append(("Segmentation", seg + "; heart structures shown as 3D shells"))
+        rows.append(("Segmentation", seg))
         lrows, lwarn, _ = label_check(a, dicom)
         rows += lrows
         warn += lwarn
@@ -416,21 +416,21 @@ def run_plan(a, dicom=None, modality_note=None) -> tuple[list[str], list[str]]:
     else:
         rows.append(("Viewer", "3D view and slices"))
     if a.imagechd is not None:
-        rows.append(("Truth", "from the ImageCHD diagnosis table: the run is scored"))
+        rows.append(("Truth", "the ImageCHD diagnosis table"))
     elif a.hvsmr is not None:
-        rows.append(("Truth", "from the HVSMR clinical table: the run is scored"))
+        rows.append(("Truth", "the HVSMR-2.0 clinical table"))
     elif coh is not None and coh.has_truth:
         t = ", ".join(_class_name(c) for c in coh.truth(None)) or "normal (no defect)"
-        rows.append(("Truth", f"{t} (from --truth): the run is scored"))
+        rows.append(("Truth", f"{t} (--truth)"))
     else:
-        rows.append(("Truth", "not given: the model's diagnosis is shown, not scored"))
-        warn.append("No true diagnosis (--truth not given): you get the model's diagnosis, but no score.")
+        rows.append(("Truth", "not given"))
+        warn.append("No true diagnosis (--truth): the run is not scored.")
     if a.dry_run_scripted:
-        rows.append(("Model", "scripted test model: no API calls, free"))
+        rows.append(("Model", "none: scripted test (--dry-run-scripted)"))
     elif str(a.model).startswith("local:"):
-        rows.append(("Model", f"{a.model} (your own model server: no API cost)"))
+        rows.append(("Model", f"{a.model} (your own server)"))
     else:
-        rows.append(("Model", f"{a.model} (PAID API)"))
+        rows.append(("Model", f"{a.model} (paid API)"))
     steps = a.max_steps if a.max_steps is not None else DEFAULT_MAX_STEPS
     cap = "no cost limit" if a.cost_cap is None else f"stops at ${a.cost_cap:.2f}"
     rows.append(("Limits", f"{cap} · at most {steps} steps"))

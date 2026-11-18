@@ -270,7 +270,7 @@ def test_main_usage(capsys):
         run_sh.main(["--imagechd", "1001", "-h"])
     out = capsys.readouterr().out
     assert e.value.code == 0 and "the scan (give exactly one)" in out and "--truth CODE" in out
-    assert "--yes, -y" in out and "./run.sh --list classes" in out
+    assert "--yes, -y" in out and "--list WHAT" in out
 
 
 SHOW = "run --no-sync python -m chd_client.run_sh --show-result "
@@ -443,10 +443,16 @@ def test_setup_option_without_value_is_a_usage_error(args, msg):
     assert p.returncode == 2 and msg in p.stderr and "unbound variable" not in p.stderr and p.stdout == ""
 
 
-def test_setup_help_prints_the_header_only():
+def test_setup_help_is_a_plain_option_list():
     p = subprocess.run(["bash", str(REPO / "setup.sh"), "--help"], capture_output=True, text=True, timeout=30)
-    assert p.returncode == 0 and p.stdout.startswith("# Set up CHD-Bench") and "Exit code:" in p.stdout
-    assert "set -euo" not in p.stdout
+    assert p.returncode == 0 and p.stdout.startswith("usage: ./setup.sh [options]") and "exit code:" in p.stdout
+    lines = p.stdout.splitlines()
+    assert not [ln for ln in lines if ln.startswith("#")] and max(map(len, lines)) <= 90
+    flags = {"--imagechd-dir", "--hvsmr-dir", "--slicer", "--xvfb", "--lib-dir", "--shared", "--check-case",
+             "--skip-check"}
+    assert all(f"  {f} " in p.stdout for f in flags)
+    script = (REPO / "setup.sh").read_text()
+    assert all(f"    {f})" in script for f in flags), "every option in the help is one setup.sh parses"
 
 
 def test_run_sh_is_executable_and_runs_the_module():

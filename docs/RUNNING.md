@@ -1,16 +1,15 @@
 # Running CHD-Bench: every option
 
-`./run.sh --help` prints every option with one line each; this page has the details. `./run.sh` takes every option
-of `run-episode`, prints the run plan (and asks before a paid run), starts Slicer, does the run, always stops
-Slicer afterwards, and ends with the RESULT box. It refuses `--slicer-url`: for a Slicer you started yourself, use
+The details behind `./run.sh --help`. `./run.sh` takes every option of `run-episode` and always stops the Slicer
+it started, also after an error or Ctrl-C. It refuses `--slicer-url`: for a Slicer you started yourself, use
 `uv run run-episode` ([SETUP.md](SETUP.md#one-slicer-for-several-episodes)).
 
 ## run.sh's own options
 
 | Option | |
 |---|---|
-| `--yes`, `-y` | start a paid run without the question (for scripts). Without a terminal, a paid run needs it |
-| `--list imagechd\|hvsmr\|classes` | list the ImageCHD cases, the HVSMR-2.0 cases or the class codes for `--truth`, then stop |
+| `--yes`, `-y` | start a paid run without asking (for scripts). Without a terminal, a paid run needs it |
+| `--list imagechd\|hvsmr\|classes` | list the ImageCHD cases, the HVSMR-2.0 cases or the class codes for `--truth` |
 
 ## The case
 

@@ -128,3 +128,32 @@ def test_cli_check_data(tmp_path, spacing, capsys):
     assert run("check-data", "--dir", root) == 0
     assert capsys.readouterr().out == "1001 2\n"
     assert run("check-data", "--dir", tmp_path / "nope") == 1
+
+
+def _slicer(folder):
+    folder.mkdir(parents=True)
+    launcher = folder / "Slicer"
+    launcher.write_text("#!/bin/sh\n")
+    launcher.chmod(0o755)
+    return launcher
+
+
+def test_find_slicer_reuses_an_installed_slicer_of_the_pinned_version(tmp_path):
+    """Setup reuses a Slicer that is already installed (no 414 MB download) when its version is the pinned one."""
+    from chd_client.setup_config import find_slicer
+    want = _slicer(tmp_path / "Applications" / "Slicer" / "Slicer-5.10.0-linux-amd64")
+    other = _slicer(tmp_path / "Applications" / "Slicer" / "Slicer-5.8.1-linux-amd64")
+    _slicer(tmp_path / ".hidden" / "Slicer-5.10.0-linux-amd64")                 # hidden folders: not searched
+    _slicer(tmp_path / "a" / "b" / "c" / "d" / "Slicer-5.10.0-linux-amd64")    # deeper than 4 levels
+    (tmp_path / "x" / "Slicer-5.10.0-linux-amd64").mkdir(parents=True)         # no launcher
+    found, notes = find_slicer("5.10.0", roots=[tmp_path], which=lambda name: None)
+    assert found == want.resolve()
+    assert notes == [f"found Slicer 5.8.1 at {other.resolve()}: not used (CHD-Bench needs 5.10.0)"]
+
+
+def test_find_slicer_takes_the_slicer_on_path_and_finds_nothing_else(tmp_path):
+    from chd_client.setup_config import find_slicer
+    on_path = _slicer(tmp_path / "opt" / "Slicer-5.10.0-linux-amd64")
+    found, notes = find_slicer("5.10.0", roots=[tmp_path / "home"], which=lambda name: str(on_path))
+    assert found == on_path.resolve() and notes == []
+    assert find_slicer("5.10.0", roots=[tmp_path / "home"], which=lambda name: None) == (None, [])

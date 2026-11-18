@@ -39,6 +39,7 @@ starting, and on Linux also when the run was stopped by a signal (slicer-mcp xvf
 """
 
 import argparse
+from pathlib import Path
 import json
 import os
 import secrets
@@ -233,12 +234,11 @@ def show_plan(parsed, yes: bool, tty: bool, stdin=None, err=None, dicom=None, mo
     if not ux.is_paid(parsed) or yes:
         return True
     if not tty:
-        print("run.sh: this run calls a paid model and nobody can answer the question here (not a terminal). "
-              "Add --yes to start it. Nothing ran.", file=err)
+        print("run.sh: a paid run needs --yes when there is no terminal to ask. Nothing ran.", file=err)
         return False
     if ux.confirm("Start this paid run? [y/N] ", stdin=stdin, stdout=err):
         return True
-    print("Not started. Nothing ran and nothing was charged.", file=err)
+    print("Not started.", file=err)
     return False
 
 
@@ -266,18 +266,44 @@ def list_things(what) -> int:
     """./run.sh --list imagechd | hvsmr | classes: the cases a run can take, or the --truth class names."""
     if what == "imagechd":
         from chd_client.task import imagechd
-        imagechd.main(["list"])
+        try:
+            root = imagechd.dataset_dir()
+        except Exception:  # noqa: BLE001
+            root = None
+        if root is None or not Path(root).is_dir():
+            print(f"run.sh: ImageCHD is not set up on this machine (no folder at {root}). Tell CHD-Bench where it "
+                  "is: ./setup.sh --imagechd-dir /path/to/ImageCHD (README, section 2)", file=sys.stderr)
+            return 2
+        try:
+            imagechd.main(["list"])
+        except SystemExit as e:  # its own error line is printed
+            print(f"run.sh: check the folder with ./setup.sh --imagechd-dir {root}", file=sys.stderr)
+            return 2 if e.code else 0
         return 0
     if what == "hvsmr":
+        from chd_client import paths
+        from chd_client.chd_classes import code
         from chd_client.task import cohorts
         try:
-            for n in cohorts.hvsmr_cases():
-                names = ", ".join(cohorts.hvsmr_truth(n)) or "normal"
-                print(f"{n:4d}  {names}")
-        except Exception as e:  # noqa: BLE001
-            print(f"run.sh: cannot read the HVSMR-2.0 data ({e}). Set its folder: ./setup.sh --hvsmr-dir "
-                  "/path/to/HVSMR-2.0", file=sys.stderr)
+            table = paths.get(cohorts.HVSMR_CLINICAL)
+        except Exception:  # noqa: BLE001
+            table = None
+        if table is None or not Path(table).is_file():
+            print(f"run.sh: HVSMR-2.0 is not set up on this machine (no hvsmr_clinical.csv at {table}). Tell "
+                  "CHD-Bench where it is: ./setup.sh --hvsmr-dir /path/to/HVSMR-2.0 (README, section 2)",
+                  file=sys.stderr)
             return 2
+        try:
+            cases = cohorts.hvsmr_cases()
+            rows = [(n, " ".join(code(c) for c in cohorts.hvsmr_truth(n)) or "normal") for n in cases]
+        except Exception as e:  # noqa: BLE001
+            print(f"run.sh: cannot read the HVSMR-2.0 diagnoses in {table} ({e}). Check the folder with "
+                  "./setup.sh --hvsmr-dir /path/to/HVSMR-2.0", file=sys.stderr)
+            return 2
+        print(f"{'case':<6}diagnosis (class codes: ./run.sh --list classes)")
+        for n, dx in rows:
+            print(f"{n:<6}{dx}")
+        print(f"{len(rows)} cases (use: ./run.sh --hvsmr N --labels gt ...)")
         return 0
     if what == "classes":
         from chd_client.chd_classes import MANIFEST, SEGMENT_NAMES, load
@@ -302,9 +328,9 @@ def help_text() -> str:
     ap = run_episode.parser(prog="./run.sh")
     g = ap.add_argument_group("run.sh only")
     g.add_argument("--yes", "-y", action="store_true",
-                   help="start a paid run without the question (for scripts; the plan is still printed)")
+                   help="start a paid run without asking (for scripts)")
     g.add_argument("--list", metavar="WHAT", choices=("imagechd", "hvsmr", "classes"),
-                   help="list the ImageCHD cases, the HVSMR-2.0 cases or the class codes, then stop")
+                   help="list the ImageCHD cases, the HVSMR-2.0 cases or the class codes")
     return ap.format_help()
 
 

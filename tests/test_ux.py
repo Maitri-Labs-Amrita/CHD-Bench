@@ -43,9 +43,8 @@ def plan(argv, **kw):
 
 def test_own_scan_without_labels_or_truth_warns_about_both_and_about_privacy(tmp_path):
     text, warns = plan(["--volume", str(ct(tmp_path)), "--model", ARGON])
-    assert "Segmentation  none: the model sees the scan only" in text
-    assert "Truth         not given" in text and f"{ARGON} (PAID API)" in text
-    assert "No segmentation (--labels not given)" in warns and "No true diagnosis (--truth not given)" in warns
+    assert "Segmentation  none" in text and "Truth         not given" in text and f"{ARGON} (paid API)" in text
+    assert "No segmentation (--labels)" in warns and "No true diagnosis (--truth): the run is not scored" in warns
     assert "Images of your scan are sent to OpenRouter. Use de-identified scans only" in warns
 
 
@@ -53,9 +52,9 @@ def test_a_scored_own_scan_shows_the_truth_in_words(tmp_path):
     s = ct(tmp_path)
     text, warns = plan(["--volume", str(s), "--labels", str(seg(tmp_path, [1, 2, 3, 4, 6, 7])), "--truth", "vsd",
                         "TOF", "--dry-run-scripted"])
-    assert "Ventricular septal defect, Tetralogy of Fallot (from --truth): the run is scored" in text
+    assert "Ventricular septal defect, Tetralogy of Fallot (--truth)" in text
     assert "Label values  1=LV, 2=RV, 3=LA, 4=RA, 6=Ao, 7=PA (ImageCHD codes, the default)" in text
-    assert "scripted test model: no API calls, free" in text and warns == ""
+    assert "none: scripted test (--dry-run-scripted)" in text and warns == ""
 
 
 def test_label_values_that_do_not_match_the_map_are_flagged(tmp_path):
@@ -109,7 +108,7 @@ def test_the_plan_asks_before_a_paid_run_only(tmp_path):
         assert run_sh.show_plan(paid, yes=False, tty=True, stdin=io.StringIO(answer), err=err) is ok
         assert "Start this paid run? [y/N]" in err.getvalue()
     err = io.StringIO()
-    assert run_sh.show_plan(paid, yes=False, tty=False, err=err) is False and "Add --yes" in err.getvalue()
+    assert run_sh.show_plan(paid, yes=False, tty=False, err=err) is False and "needs --yes" in err.getvalue()
     for a, yes in ((paid, True), (free, False)):
         err = io.StringIO()
         assert run_sh.show_plan(a, yes=yes, tty=True, stdin=io.StringIO(""), err=err) is True
@@ -168,3 +167,28 @@ def test_the_result_box_says_when_nothing_was_charged():
     assert "nothing was charged" in "\n".join(ux.result_box(None, "3D Slicer did not start", before_model=True))
     box = "\n".join(ux.result_box(None, "killed"))
     assert "nothing was charged" not in box and "may have been charged" in box
+
+
+def test_list_hvsmr_prints_class_codes(tmp_path, monkeypatch, capsys):
+    from chd_client import paths
+    from chd_client.task import cohorts
+    table = tmp_path / "hvsmr_clinical.csv"
+    table.write_text("x")
+    monkeypatch.setattr(paths, "get", lambda name, path=None: table)
+    monkeypatch.setattr(cohorts, "hvsmr_cases", lambda path=None: [3, 7])
+    monkeypatch.setattr(cohorts, "hvsmr_truth", lambda n, path=None: (
+        ["ventricular_septal_defect", "double_outlet_right_ventricle"] if n == 3 else []))
+    assert run_sh.list_things("hvsmr") == 0
+    out = capsys.readouterr().out
+    assert "3     VSD DORV" in out and "7     normal" in out and "ventricular_septal_defect" not in out
+
+
+def test_list_says_plainly_when_a_dataset_is_not_set_up(tmp_path, monkeypatch, capsys):
+    from chd_client import paths
+    monkeypatch.setattr(paths, "get", lambda name, path=None: tmp_path / "nowhere" / "hvsmr_clinical.csv")
+    monkeypatch.setenv("CHD_IMAGECHD_DIR", str(tmp_path / "nowhere"))
+    assert run_sh.list_things("hvsmr") == 2 and run_sh.list_things("imagechd") == 2
+    err = capsys.readouterr().err
+    assert "HVSMR-2.0 is not set up on this machine" in err and "./setup.sh --hvsmr-dir" in err
+    assert "ImageCHD is not set up on this machine" in err and "./setup.sh --imagechd-dir" in err
+    assert "Errno" not in err

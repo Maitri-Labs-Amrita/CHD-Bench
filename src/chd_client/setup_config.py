@@ -5,6 +5,7 @@
     python -m chd_client.setup_config slicer-mcp                   the installed slicer-mcp: version and commit
     python -m chd_client.setup_config get --path P --key K          the key's value ('' when absent; a list: one per line)
     python -m chd_client.setup_config check-data --dir D [--case ID]  the case for the setup check, and the case count
+    python -m chd_client.setup_config find-slicer --version V       an installed Linux Slicer V (its launcher), or ''
 
 The runtime file is gitignored and belongs to the user. A write starts from the committed runtime.json (`--base`),
 keeps every setting already in the local file, then sets only the keys setup owns: slicer_executable; imagechd_dir
@@ -17,8 +18,13 @@ A file is written only when its content changes (a rerun prints "unchanged"), th
 import argparse
 import json
 import os
+import re
+import shutil
 import sys
 from pathlib import Path
+
+SLICER_DIR_RE = re.compile(r"Slicer-(\d+\.\d+\.\d+)-linux-amd64")
+SKIP_DIRS = {"node_modules", "site-packages", "__pycache__", "proc", "sys"}
 
 CHD_COMMENT = ("Written by ./setup.sh for this user and machine (gitignored). Setup sets only slicer_executable, "
                "imagechd_dir, imagechd_diagnosis_sheet, eval_launch.caffeinate, xvfb_executable and extra_lib_dirs "
@@ -142,6 +148,43 @@ def set_paths(path, updates: dict) -> str:
     return write_if_changed(path, old, new)
 
 
+def find_slicer(version, roots=None, max_depth=4, which=shutil.which) -> tuple[Path | None, list[str]]:
+    """An installed Linux Slicer of `version`: a folder Slicer-<version>-linux-amd64 (the name of Slicer's own
+    tarball, which slicer-mcp setup-headless reuses with --slicer-dir <its parent>) holding an executable Slicer
+    launcher, at most max_depth folders under the home folder or /opt, or the Slicer on PATH. Returns (the launcher
+    or None, notes on Slicer folders of other versions, which are not used). Hidden folders are not searched."""
+    roots = [Path.home(), Path("/opt")] if roots is None else [Path(r) for r in roots]
+    found_dirs = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for dirpath, dirnames, _ in os.walk(root):
+            depth = len(Path(dirpath).relative_to(root).parts)
+            keep = []
+            for d in dirnames:
+                if SLICER_DIR_RE.fullmatch(d):
+                    found_dirs.append(Path(dirpath) / d)  # not searched further: a Slicer tree is large
+                elif depth + 1 < max_depth and not d.startswith(".") and d not in SKIP_DIRS:
+                    keep.append(d)
+            dirnames[:] = keep
+    on_path = which("Slicer")
+    if on_path:
+        found_dirs.append(Path(on_path).resolve().parent)
+    found, notes, seen = None, [], set()
+    for d in found_dirs:
+        d = d.resolve()
+        m = SLICER_DIR_RE.fullmatch(d.name)
+        launcher = d / "Slicer"
+        if d in seen or not m or not (launcher.is_file() and os.access(launcher, os.X_OK)):
+            continue
+        seen.add(d)
+        if m.group(1) == version:
+            found = found or launcher
+        else:
+            notes.append(f"found Slicer {m.group(1)} at {launcher}: not used (CHD-Bench needs {version})")
+    return found, notes
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m chd_client.setup_config", description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -165,8 +208,16 @@ def main(argv=None):
     h.add_argument("--path", required=True, help="config/paths.local.json")
     h.add_argument("--check-only", action="store_true")
     sub.add_parser("hvsmr-current")
+    fs = sub.add_parser("find-slicer")
+    fs.add_argument("--version", required=True)
     sub.add_parser("keys")
     a = ap.parse_args(argv)
+    if a.cmd == "find-slicer":
+        launcher, notes = find_slicer(a.version)
+        for n in notes:
+            print(f"  {n}", file=sys.stderr)
+        print(launcher or "")
+        return 0
     if a.cmd == "hvsmr-current":
         from chd_client import paths
         try:

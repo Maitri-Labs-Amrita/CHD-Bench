@@ -7,10 +7,13 @@
 # 1. Prerequisites: uv (https://docs.astral.sh/uv/) and git (uv fetches slicer-mcp from its git repository).
 # 2. uv sync --frozen --inexact: the locked versions, including slicer-mcp at the commit pyproject.toml pins
 #    ([tool.uv.sources] rev); uv.lock is not changed; installed extras such as transformers stay.
-# 3. Slicer 5.10.0: --slicer PATH uses an existing one (Linux: with --xvfb PATH and --lib-dir DIR for a headless
-#    install), else the one already in config/runtime.local.json. Else on Linux `slicer-mcp setup-headless` installs
-#    Xvfb, Slicer (sha512-checked download) and the missing system libraries (--shared DIR: into one group folder, so
-#    a team installs once). On macOS: /Applications/Slicer.app.
+# 3. Slicer 5.10.0: --slicer PATH uses an existing one, else the one already in config/runtime.local.json. Else on
+#    Linux setup looks for an installed one (a Slicer-5.10.0-linux-amd64 folder up to 4 levels under your home
+#    folder or /opt, or Slicer on PATH) and reuses it: nothing is downloaded. Slicer folders of other versions are
+#    listed and not used. Linux runs Slicer on a virtual display: when Xvfb is not installed (and no --xvfb PATH is
+#    given), `slicer-mcp setup-headless` adds it, and the missing system libraries, without sudo. With no Slicer
+#    5.10.0 found, setup-headless also downloads Slicer (sha512-checked; --shared DIR: into one group folder, so a
+#    team installs once). On macOS: /Applications/Slicer.app.
 # 4. ImageCHD: --imagechd-dir DIR, else $CHD_IMAGECHD_DIR, else the config's imagechd_dir, else data/ImageCHD_dataset.
 #    It cannot be downloaded automatically (Kaggle login).
 #    HVSMR-2.0 (optional, MRI): --hvsmr-dir DIR (the folder with orig/ and hvsmr_clinical.csv) is checked and saved
@@ -33,6 +36,33 @@ HEADLESS_RT="$CHD/data/dev/headless_runtime.json"
 CHECK_LOG="$CHD/data/dev/setup_check.log"
 
 SLICER=""; XVFB=""; LIB_DIRS=(); SHARED=""; IMAGECHD_DIR=""; HVSMR_DIR=""; CHECK_CASE=""; SKIP_CHECK=0
+usage() {
+  cat <<'USAGE_END'
+usage: ./setup.sh [options]
+
+Set up CHD-Bench (Linux or macOS, no sudo). Rerun it at any time, e.g. to add a dataset.
+
+data (both optional; your own scans need neither):
+  --imagechd-dir DIR   the ImageCHD folder (CT)
+  --hvsmr-dir DIR      the HVSMR-2.0 folder (MRI), with orig/ and hvsmr_clinical.csv
+
+3D Slicer 5.10.0:
+  --slicer PATH        the Slicer launcher to use (.../Slicer-5.10.0-linux-amd64/Slicer).
+                       Default: one setup finds under your home folder or /opt, or on
+                       PATH; else a download (414 MB) into ~/Applications
+  --xvfb PATH          Linux: the Xvfb to use. Default: the installed one, else setup adds
+                       one into ~/.local/slicer-mcp-headless
+  --lib-dir DIR        Linux: a folder of extra system libraries for Slicer (repeatable)
+  --shared DIR         Linux: install Xvfb and Slicer into one shared folder (one install
+                       for a team)
+
+test run:
+  --check-case ID      the ImageCHD case for the free test run (default: the first one)
+  --skip-check         no test run
+
+exit code: 0 set up and tested; 3 set up but not tested (no ImageCHD); other: failed
+USAGE_END
+}
 need() {
   local opt="$1" what="$2"; shift 2
   if [ $# -lt 2 ] || [ -z "$2" ] || [ "${2#--}" != "$2" ]; then
@@ -50,7 +80,7 @@ while [ $# -gt 0 ]; do
     --hvsmr-dir) need "$1" "the HVSMR-2.0 dataset folder (with orig/ and hvsmr_clinical.csv)" "$@"; HVSMR_DIR="$2"; shift 2 ;;
     --check-case) need "$1" "an ImageCHD case id (e.g. 1001)" "$@"; CHECK_CASE="$2"; shift 2 ;;
     --skip-check) SKIP_CHECK=1; shift ;;
-    -h|--help) sed -n '2,/^set -euo pipefail$/{/^set -euo pipefail$/!p;}' "$0"; exit 0 ;;
+    -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1 (see ./setup.sh --help)" >&2; exit 2 ;;
   esac
 done
@@ -67,10 +97,17 @@ case "$(uname -s)" in
 esac
 
 say "1/6 prerequisites"
-command -v uv >/dev/null || die "uv not found. Install it (https://docs.astral.sh/uv/), e.g.:
+if ! command -v uv >/dev/null && [ -x "$HOME/.local/bin/uv" ]; then
+  export PATH="$HOME/.local/bin:$PATH"   # uv was just installed and this shell has not read the new PATH yet
+fi
+command -v uv >/dev/null || die "uv (the Python package manager that installs everything else) is not installed.
+Install it with:
   $UV_INSTALL
-then open a new shell and run ./setup.sh again."
-command -v git >/dev/null || die "git not found (uv needs it to fetch slicer-mcp): install git and run ./setup.sh again"
+then run ./setup.sh again (open a new terminal first if the uv command is still not found)."
+command -v git >/dev/null || die "git is not installed (uv needs it to fetch slicer-mcp from GitHub). Install it:
+  Ubuntu or Debian: sudo apt install git
+  macOS:            xcode-select --install
+then run ./setup.sh again."
 echo "  ok: uv $(uv --version | awk '{print $2}') ($(command -v uv)), git"
 
 say "2/6 uv sync (with slicer-mcp at the pinned commit)"
@@ -105,10 +142,19 @@ elif [ "$OS" = mac ]; then
   SLICER="$MAC_SLICER"
   SLICER_NOTE="reused $SLICER"
 else
-  echo "  no --slicer: running slicer-mcp setup-headless${SHARED:+ --shared $SHARED}"
+  FOUND=""
+  [ -n "$SHARED" ] || FOUND="$(helper find-slicer --version "$SLICER_VERSION")"
+  if [ -n "$FOUND" ]; then
+    echo "  found Slicer $SLICER_VERSION: $FOUND (reused: no Slicer download)"
+    REUSE_ARGS=(--slicer-dir "$(dirname "$(dirname "$FOUND")")")
+  else
+    echo "  no Slicer $SLICER_VERSION found on this machine: slicer-mcp setup-headless downloads it"
+    REUSE_ARGS=()
+  fi
+  echo "  running slicer-mcp setup-headless${SHARED:+ --shared $SHARED}"
   echo "  (Xvfb, Slicer $SLICER_VERSION and the missing system libraries; each part is reused when already there)"
-  (cd "$CHD" && uv run --no-sync slicer-mcp setup-headless --runtime-out "$HEADLESS_RT" ${SHARED:+--shared "$SHARED"}) \
-    || die "slicer-mcp setup-headless failed (output above)"
+  (cd "$CHD" && uv run --no-sync slicer-mcp setup-headless --runtime-out "$HEADLESS_RT" ${SHARED:+--shared "$SHARED"} \
+    ${REUSE_ARGS[@]+"${REUSE_ARGS[@]}"}) || die "slicer-mcp setup-headless failed (output above)"
   SLICER="$(helper get --path "$HEADLESS_RT" --key slicer_executable)"
   XVFB="$(helper get --path "$HEADLESS_RT" --key xvfb_executable)"
   LIB_DIRS=(); while IFS= read -r d; do [ -n "$d" ] && LIB_DIRS+=("$d"); done < <(helper get --path "$HEADLESS_RT" --key extra_lib_dirs)
@@ -118,7 +164,17 @@ fi
 if [ "$OS" = linux ]; then
   if [ -z "$XVFB" ]; then
     XVFB="$(command -v Xvfb || true)"
-    [ -n "$XVFB" ] || die "no Xvfb (Linux runs Slicer on a virtual display): pass --xvfb PATH, or run ./setup.sh without --slicer so slicer-mcp setup-headless installs Xvfb"
+  fi
+  if [ -z "$XVFB" ]; then
+    # an existing Slicer and no Xvfb: setup-headless adds Xvfb and the missing system libraries around that Slicer
+    SDIR="$(dirname "$SLICER")"
+    [ "$(basename "$SDIR")" = "Slicer-$SLICER_VERSION-linux-amd64" ] || die "no Xvfb on this machine (Linux runs Slicer on a virtual display), and setup can add it only around a Slicer $SLICER_VERSION in its own Slicer-$SLICER_VERSION-linux-amd64 folder ($SLICER is not). Pass --xvfb PATH, or run ./setup.sh without --slicer"
+    echo "  no Xvfb on this machine: slicer-mcp setup-headless adds it (no sudo) and reuses $SLICER"
+    (cd "$CHD" && uv run --no-sync slicer-mcp setup-headless --runtime-out "$HEADLESS_RT" --slicer-dir "$(dirname "$SDIR")") \
+      || die "slicer-mcp setup-headless failed (output above)"
+    XVFB="$(helper get --path "$HEADLESS_RT" --key xvfb_executable)"
+    LIB_DIRS=(); while IFS= read -r d; do [ -n "$d" ] && LIB_DIRS+=("$d"); done < <(helper get --path "$HEADLESS_RT" --key extra_lib_dirs)
+    [ -n "$XVFB" ] || die "slicer-mcp setup-headless wrote no xvfb_executable into $HEADLESS_RT"
   fi
   [ -x "$XVFB" ] || die "--xvfb $XVFB: not an executable file"
   XVFB="$(abspath "$XVFB")"
@@ -236,7 +292,7 @@ else
 fi
 
 KEYS="$(helper keys 2>/dev/null || true)"
-case "$CHECK" in PASSED*) CHK_LINE="PASSED: Slicer starts, a case loads, a run folder is written" ;; *) CHK_LINE="$CHECK" ;; esac
+case "$CHECK" in PASSED*) CHK_LINE="PASSED" ;; *) CHK_LINE="$CHECK" ;; esac
 RULE="================================================================"
 cat <<EOF
 
@@ -279,10 +335,10 @@ echo
 echo "Next, from $CHD (every option: ./run.sh --help; every situation: README.md):"
 if [ "$DATA_OK" = 1 ]; then
   echo "  ./run.sh --list imagechd                                   the cases and their diagnoses"
-  echo "  ./run.sh --imagechd $CASE --labels gt --dry-run-scripted        a free test run (no model)"
-  echo "  ./run.sh --imagechd $CASE --labels gt --model claude-opus-5-5   a real model (paid; asks before it starts)"
+  echo "  ./run.sh --imagechd $CASE --labels gt --dry-run-scripted        a test run, no model"
+  echo "  ./run.sh --imagechd $CASE --labels gt --model claude-opus-5-5   with a model"
 fi
-echo "  ./run.sh --volume /path/to/scan_or_dicom_folder --model M  your own scan (no dataset needed)"
+echo "  ./run.sh --volume /path/to/scan_or_dicom_folder --model M  your own scan"
 echo "  ./run.sh --list classes                                    the class codes for --truth"
 if [ -z "$KEYS" ]; then
   echo "  A real model needs a key: put one line in $CHD/.env, for example OPENROUTER_API_KEY=sk-or-..."

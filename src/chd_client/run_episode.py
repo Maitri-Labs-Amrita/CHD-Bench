@@ -866,8 +866,8 @@ defects it sees. Every option below has a default except the scan."""
 
 HELP_EPILOG = """\
 examples:
-  ./run.sh --imagechd 1001 --labels gt --dry-run-scripted          free test run (no model, no cost)
-  ./run.sh --imagechd 1001 --labels gt --model claude-opus-5-5     ImageCHD case 1001 with Claude Opus (paid)
+  ./run.sh --imagechd 1001 --labels gt --dry-run-scripted          test run, no model
+  ./run.sh --imagechd 1001 --labels gt --model claude-opus-5-5     ImageCHD case 1001 with Claude Opus
   ./run.sh --hvsmr 3 --labels gt --model openrouter:google/gemini-4-argon   HVSMR-2.0 case 3 through OpenRouter
   ./run.sh --volume ~/scans/patient7 --model openrouter:google/gemini-4-argon
                                                                    your own scan (a DICOM folder), no score
@@ -876,21 +876,9 @@ examples:
   ./run.sh --imagechd 1001 --labels gt --no-3d --model claude-opus-5-5   slices only, no 3D view
 
 what the model gets:
-  with --labels              the scan, the segmentation and the 3D view: the full setup
-  without --labels           the scan and the 3D view, no segmentation (CT only)
+  with --labels              the scan, the segmentation and the 3D view
+  without --labels           the scan and the 3D view (CT only)
   with --labels --no-3d      the scan and the segmentation, slices only
-
-what you see:
-  1. The run plan: the scan, the segmentation, the truth, the model and the cost limit, with a WARNING for
-     anything missing. For a paid model it asks "Start this paid run? [y/N]" (--yes skips the question).
-  2. One progress line per step: what the model did, the cost so far and the time.
-  3. The RESULT box: the model's diagnosis, the true diagnosis and the score when there is one, the cost and the
-     time, and the path of report.pdf (every step with its images).
-
-lists:
-  ./run.sh --list imagechd     ImageCHD cases and their diagnoses
-  ./run.sh --list hvsmr        HVSMR-2.0 cases and their diagnoses
-  ./run.sh --list classes      the class codes for --truth (config/chd_classes.csv)
 
 more: README.md (setup, data, your own scans, your own GPU), docs/RUNNING.md, docs/MODELS.md"""
 
@@ -908,18 +896,16 @@ def parser(prog="run-episode") -> argparse.ArgumentParser:
     case.add_argument("--hvsmr", type=int, metavar="N",
                       help="an HVSMR-2.0 case (MRI), e.g. 3. List: ./run.sh --list hvsmr")
     case.add_argument("--volume", metavar="SCAN",
-                      help="your own scan: a folder with DICOM files (searched to any depth; the series with the "
-                           "most files is used), a DICOM file, or a NIfTI, NRRD or MHA file. Converted to NIfTI "
-                           "when needed. No dataset is needed for this")
+                      help="your own scan: a DICOM folder (searched to any depth; the series with the most files "
+                           "is used), a DICOM file, or a NIfTI, NRRD or MHA file")
     g.add_argument("--modality", choices=("ct", "mr"), default="ct",
-                   help="with --volume: ct (default; values in HU) or mr (MRI)")
+                   help="with --volume: ct (default) or mr. ./run.sh reads it from a DICOM header")
 
     g = ap.add_argument_group("what the model sees")
     g.add_argument("--labels", default=None, metavar="gt|FILE",
-                   help="the heart segmentation, shown to the model as 3D shells of six structures (LV, RV, LA, RA, "
-                        "Ao, PA), with tools to show, hide and outline them: gt = the dataset's own (ImageCHD, "
-                        "HVSMR), or a label-map file (NIfTI) on the same grid as the scan. Leave it out and the "
-                        "model sees the scan alone, with the 3D view and no segmentation (CT only)")
+                   help="the heart segmentation shown to the model (LV, RV, LA, RA, Ao, PA): gt (the dataset's "
+                        "own) or a NIfTI label map on the scan's grid. Without it, the model gets the scan alone "
+                        "(CT only)")
     g.add_argument("--label-map", metavar="MAP",
                    help="with a --labels file: which label value is which structure, e.g. "
                         "1=LV,2=RV,3=LA,4=RA,6=Ao,7=PA (the default: ImageCHD's codes). Other values are not shown")
@@ -929,18 +915,17 @@ def parser(prog="run-episode") -> argparse.ArgumentParser:
 
     g = ap.add_argument_group("the true diagnosis (to score the run)")
     g.add_argument("--truth", metavar="CODE", nargs="+",
-                   help="with --volume only (dataset cases have their own): the true diagnosis as class codes, "
-                        "e.g. --truth VSD ToF (or VSD,ToF), or --truth normal. Codes: ./run.sh --list classes. "
-                        "Leave it out when it is not known: you get the model's diagnosis without a score")
+                   help="with --volume (dataset cases have their own): the true diagnosis as class codes, e.g. "
+                        "--truth VSD ToF, or --truth normal. Codes: ./run.sh --list classes. Without it, the run "
+                        "is not scored")
 
     g = ap.add_argument_group("model, cost and limits")
     g.add_argument("--model", default=DEFAULT_MODEL,
-                   help=f"the model (default {DEFAULT_MODEL}, paid). An Anthropic model id (key ANTHROPIC_API_KEY), "
+                   help=f"the model (default {DEFAULT_MODEL}): an Anthropic model id (key ANTHROPIC_API_KEY), "
                         "openrouter:<vendor>/<model> (OPENROUTER_API_KEY), openai:<model> (OPENAI_API_KEY), or "
-                        "local:<name> for a model on your own GPU (docs/GATEWAY.md, no API cost). Keys go in .env")
+                        "local:<name> for a model on your own GPU (docs/GATEWAY.md). Keys go in .env")
     g.add_argument("--dry-run-scripted", action="store_true",
-                   help="no model: a fixed script takes a few steps and submits a 'normal' diagnosis. Free; "
-                        "checks that Slicer, the scan and the report work")
+                   help="no model: a fixed script takes a few steps and submits 'normal'. Tests the setup")
     g.add_argument("--cost-cap", type=_cost_cap, default=3.0, metavar="USD",
                    help="stop the run when it has cost this many US dollars (default 3; 'none' = no limit)")
     g.add_argument("--max-steps", type=int, default=None, metavar="N",
