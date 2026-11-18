@@ -265,13 +265,28 @@ def test_cli_3d_seg_serves_the_default_profile_with_labels(monkeypatch, tmp_path
     (["--volume", "/x.nii.gz", "--modality", "mr", "--arm", "3d"], "--arm 3d \\(no mask\\) is for CT only"),
     (["--imagechd", "1008", "--arm", "3d", "--prompt", CT], "is for the 3d_seg arm, not 3d"),
     (["--imagechd", "1008", "--arm", "3d_seg", "--labels", "gt", "--prompt", NOMASK], "is for the 3d arm, not 3d_seg"),
-    (["--imagechd", "1008", "--arm", "3d_seg"], "the following arguments are required: --labels"),
-    (["--imagechd", "1008"], "the following arguments are required: --labels"),
+    (["--imagechd", "1008", "--arm", "3d_seg"], "this setup shows the model a segmentation: add --labels gt"),
+    (["--hvsmr", "24"], "this MRI scan has no segmentation: add --labels gt"),
+    (["--volume", "/x.nii.gz", "--modality", "mr"], "this MRI scan has no segmentation"),
 ])
 def test_cli_refuses_a_wrong_arm_combination(argv, msg, capsys):
     with pytest.raises(SystemExit) as ex:
         main(argv + ["--dry-run-scripted"])
     assert ex.value.code == 2 and re.search(msg, capsys.readouterr().err)
+
+
+@pytest.mark.parametrize("argv, arm, auto", [
+    (["--imagechd", "1008"], "3d", True),
+    (["--volume", "/x.nii.gz"], "3d", True),
+    (["--imagechd", "1008", "--labels", "gt"], "3d_seg", True),
+    (["--imagechd", "1008", "--arm", "2d_seg", "--labels", "gt"], "2d_seg", False),
+    (["--imagechd", "1008", "--labels", "gt", "--no-3d"], "2d_seg", True),
+])
+def test_the_arm_follows_labels_when_not_given(argv, arm, auto):
+    """No --labels: the scan alone (the 3d arm, CT only); --labels: the scan with its segmentation (3d_seg)."""
+    from chd_client.run_episode import parser
+    a = parser().parse_args(argv)
+    assert (a.arm, a.arm_auto) == (arm, auto)
 
 
 def test_an_imagechd_case_for_arm_3d_is_prepared_without_shells(tmp_path):
@@ -428,7 +443,8 @@ def test_run_sh_episode_shell_passes_the_profile_to_launch_and_stop(tmp_path):
         assert p.returncode == 0
         extra = f" --profile {profile}" if profile else ""
         assert calls[0] == "run --no-sync chd-slicer launch --no-main-window" + extra
-        assert calls[-1] == "run --no-sync chd-slicer launch --stop" + extra
+        assert calls[-2:] == ["run --no-sync chd-slicer launch --stop" + extra,
+                              "run --no-sync python -m chd_client.run_sh --show-result "]
 
 
 def test_the_shipped_nomask_example_config_loads(tmp_path):

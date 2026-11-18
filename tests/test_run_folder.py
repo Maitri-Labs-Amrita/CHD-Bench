@@ -163,7 +163,11 @@ def test_the_summary_line_prints_no_path_that_finish_run_moves(tmp_path, _report
     summary = anyio.run(lambda: run_episode(CASE, "3d_seg", ScriptedModel(dry_run_script()), srv.server,
                                             runs_dir=tmp_path / "runs", traces_dir=traces, echo=lines.append,
                                             case_source=IMAGECHD_SRC))
-    assert len(lines) == 1 and lines[0].endswith(" | pdf written") and str(tmp_path) not in lines[0]
+    steps, last = lines[:-1], lines[-1]
+    assert last.endswith(" | pdf written") and str(tmp_path) not in last
+    # one plain progress line per step before it: "step 1/75 · point at a spot · $0.00 so far · 0 s"
+    assert steps and all(ln.startswith(f"step {i}/") for i, ln in enumerate(steps, 1))
+    assert "point at a spot" in steps[0] and "submit the diagnosis" in steps[-1]
     dest = finish_run(summary, traces, imagechd=True, runs_dir=tmp_path / "runs", echo=lines.append,
                       run=fake_env_python([]))
     assert f"run folder: {dest}" in lines and (dest / "report.pdf").is_file()
@@ -313,3 +317,30 @@ def test_cohort_metrics_skip_a_custom_scan_without_truth(tmp_path):
     (tmp_path / "summary.json").write_text(json.dumps({"case_source": src}))
     m = run_folder.cohort_metrics(tmp_path, cohorts.custom("ct"))
     assert m["diagnosis"]["skipped"] == "no truth given (--truth)" and m["diagnosis"]["name"] == "my_scan"
+
+
+def test_a_custom_scan_without_truth_reports_the_models_call(tmp_path):
+    from chd_client.run_episode import diagnosis_line
+    from chd_client.task import cohorts
+    c = cohorts.custom("ct")
+    src = {"dataset": "custom", "name": "my_scan", "modality": "ct", "truth": None}
+    (tmp_path / "summary.json").write_text(json.dumps({"case_source": src}))
+    m = run_folder.cohort_metrics(tmp_path, c)
+    assert "predicted" not in m["diagnosis"]
+    assert diagnosis_line(m["diagnosis"]) == "diagnosis: no truth given (--truth)"
+    classes = {k: {"present": False, "confidence": 0.9} for k in c.classes}
+    classes["ventricular_septal_defect"] = {"present": True, "confidence": 0.8}
+    classes["tetralogy_of_fallot"] = {"present": True, "confidence": 0.7}
+    (tmp_path / "trace").mkdir()
+    (tmp_path / "trace" / "report.json").write_text(json.dumps({"classes": classes}))
+    (tmp_path / "trace" / "normal.json").write_text(json.dumps({"normal": {"present": False, "confidence": 0.95}}))
+    dx = run_folder.cohort_metrics(tmp_path, c)["diagnosis"]
+    assert dx["skipped"] == "no truth given (--truth)"
+    assert dx["predicted"] == ["ventricular_septal_defect", "tetralogy_of_fallot"]
+    assert diagnosis_line(dx) == ("diagnosis (model): VSD (0.80) + ToF (0.70) | normal called no (0.95) "
+                                  "[not scored: no truth given (--truth)]")
+    for k in classes:
+        classes[k] = {"present": False, "confidence": 0.9}
+    (tmp_path / "trace" / "report.json").write_text(json.dumps({"classes": classes}))
+    assert diagnosis_line(run_folder.cohort_metrics(tmp_path, c)["diagnosis"]).startswith(
+        f"diagnosis (model): none of {len(c.classes)} | normal called no")

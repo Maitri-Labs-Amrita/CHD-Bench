@@ -67,11 +67,14 @@ lrc=0
 SLICER_MCP_LAUNCH_NONCE="$nonce" uv run --no-sync chd-slicer launch --no-main-window ${CHD_RUN_SH_PROFILE:+--profile "$CHD_RUN_SH_PROFILE"} || lrc=$?
 if [ "$lrc" != 0 ] || [ "$sig" != 0 ]; then
   [ "$lrc" = 0 ] || echo "run.sh: chd-slicer launch failed (output above)" >&2
+  why="3D Slicer did not start (its messages are above)"
+  [ "$sig" = 0 ] || why="stopped by a signal while 3D Slicer was starting"
   if uv run --no-sync python -m chd_client.run_sh --own-launch "$nonce"; then
     echo "run.sh: stopping the Slicer this run.sh started" >&2
     uv run --no-sync chd-slicer launch --stop ${CHD_RUN_SH_PROFILE:+--profile "$CHD_RUN_SH_PROFILE"} ||
       echo "run.sh: chd-slicer launch --stop failed: a Slicer may still run (uv run chd-slicer launch --stop)" >&2
   fi
+  uv run --no-sync python -m chd_client.run_sh --show-result "" "$why" before-model || true
   [ "$sig" = 0 ] || exit "$sig"
   exit 10
 fi
@@ -90,6 +93,7 @@ else
     [ "$rc" != 0 ] || rc=11 ;;
   esac
 fi
+uv run --no-sync python -m chd_client.run_sh --show-result "${CHD_RUN_SH_RESULT:-}" || true
 exit "$rc"'''
 
 
@@ -99,10 +103,17 @@ def options(args):
     ap.add_argument("--imagechd")
     ap.add_argument("--hvsmr")
     ap.add_argument("--volume")
+    ap.add_argument("--modality")
     ap.add_argument("--runtime")
     ap.add_argument("--slicer-url")
     ap.add_argument("--dry-run-scripted", action="store_true")
+    ap.add_argument("--yes", "-y", action="store_true")
     return ap.parse_known_args(args)[0]
+
+
+def without_yes(args) -> list:
+    """The arguments for run-episode: run.sh's own --yes / -y removed."""
+    return [x for x in args if x not in ("--yes", "-y")]
 
 
 def own_launch(nonce, runtime=None) -> bool:
@@ -137,14 +148,15 @@ def prepare(args, environ, env_path=env_file.ENV_FILE):
     build it; argparse exits 2 for an option run-episode does not know."""
     a = options(args)
     if a.imagechd is None and a.hvsmr is None and a.volume is None:
-        raise RunShError("a case is required: --imagechd ID (see uv run python -m chd_client.task.imagechd list), "
-                         "--hvsmr N or --volume SCAN (NIfTI, DICOM folder, ...). Nothing ran.")
+        raise RunShError("a scan is required: --imagechd ID (list: ./run.sh --list imagechd), --hvsmr N (list: "
+                         "./run.sh --list hvsmr) or --volume SCAN (your own scan: a DICOM folder or a NIfTI file). "
+                         "Every option: ./run.sh --help. Nothing ran.")
     for opt, val in (("--imagechd", a.imagechd), ("--hvsmr", a.hvsmr)):
         if val is not None:
             try:
                 int(val)
             except ValueError:
-                hint = " (see uv run python -m chd_client.task.imagechd list)" if opt == "--imagechd" else ""
+                hint = " (list: ./run.sh --list imagechd)" if opt == "--imagechd" else " (list: ./run.sh --list hvsmr)"
                 raise RunShError(f"{opt} {val!r} is not a case id{hint}. Nothing ran.") from None
     if a.slicer_url:
         raise RunShError("--slicer-url: run.sh starts its own Slicer; for a Slicer you started yourself use "
@@ -158,7 +170,7 @@ def prepare(args, environ, env_path=env_file.ENV_FILE):
         env[RUNTIME_ENV] = a.runtime
     from chd_client import run_episode
     from chd_client.models import registry
-    parsed = run_episode.parser(prog="run.sh").parse_args(args)
+    parsed = run_episode.parser(prog="run.sh").parse_args(without_yes(args))
     try:
         with registry.as_environ(env):
             run_episode.prelaunch(parsed)
@@ -174,13 +186,142 @@ def prepare(args, environ, env_path=env_file.ENV_FILE):
     return env, notes
 
 
+def auto_modality(args) -> tuple[list, dict | None, str | None]:
+    """(args, dicom_info, modality note). A DICOM --volume without --modality takes the modality from its header:
+    --modality mr is added for an MR series. A --modality that the header contradicts is kept, with a note."""
+    from chd_client import ux
+    a = options(args)
+    if a.volume is None:
+        return args, None, None
+    try:
+        info = ux.dicom_info(a.volume)
+    except Exception:  # noqa: BLE001
+        info = None
+    if info is None or info["modality"] not in ("CT", "MR"):
+        return args, info, None
+    given = next((args[i + 1] for i, x in enumerate(args[:-1]) if x == "--modality"), None)
+    header = "ct" if info["modality"] == "CT" else "mr"
+    if given is None:
+        return (args + ["--modality", "mr"] if header == "mr" else args), info, "from the DICOM header"
+    if given != header:
+        return args, info, (f"WARNING: the DICOM header says {info['modality']}, but --modality is {given}")
+    return args, info, None
+
+
+def preflight_problem(parsed, dicom=None) -> str | None:
+    """Why the run cannot work, found before Slicer starts (a missing scan or dataset folder, a bad segmentation
+    file), as a sentence with the fix; None when there is nothing."""
+    from chd_client import ux
+    return ux.missing_data(parsed) or ux.label_check(parsed, dicom)[2]
+
+
+def show_plan(parsed, yes: bool, tty: bool, stdin=None, err=None, dicom=None, modality_note=None,
+              check=True) -> bool:
+    """Print the run plan and its warnings; for a paid model ask before starting (unless --yes). False: do not run.
+    check: run preflight_problem first (main runs it itself, to exit 2 for a problem and 1 for a no)."""
+    from chd_client import ux
+    err = err or sys.stderr
+    problem = preflight_problem(parsed, dicom) if check else None
+    if problem:
+        print(f"run.sh: {problem}. Nothing ran.", file=err)
+        return False
+    lines, warns = ux.run_plan(parsed, dicom, modality_note)
+    ux.print_lines(lines, err)
+    for w in warns:
+        print(f"  WARNING: {w}", file=err)
+    print("", file=err)
+    if not ux.is_paid(parsed) or yes:
+        return True
+    if not tty:
+        print("run.sh: this run calls a paid model and nobody can answer the question here (not a terminal). "
+              "Add --yes to start it. Nothing ran.", file=err)
+        return False
+    if ux.confirm("Start this paid run? [y/N] ", stdin=stdin, stdout=err):
+        return True
+    print("Not started. Nothing ran and nothing was charged.", file=err)
+    return False
+
+
+def show_result(pointer, reason=None, before_model=False) -> None:
+    """After Slicer stops: the result box of the run that run-episode wrote to `pointer` ($CHD_RUN_SH_RESULT); with no
+    pointer, a box with `reason`."""
+    from chd_client import ux
+    try:
+        info = json.loads(open(pointer).read()) if pointer else None
+    except (OSError, ValueError):
+        info = None
+    if info is None:
+        ux.print_lines(ux.result_box(None, reason or "the run stopped before it finished (see the messages above)",
+                                     before_model))
+    else:
+        ux.print_lines(ux.result_box(info.get("run_dir"), info.get("error"), bool(info.get("before_model"))))
+    if pointer:
+        try:
+            os.unlink(pointer)
+        except OSError:
+            pass
+
+
+def list_things(what) -> int:
+    """./run.sh --list imagechd | hvsmr | classes: the cases a run can take, or the --truth class names."""
+    if what == "imagechd":
+        from chd_client.task import imagechd
+        imagechd.main(["list"])
+        return 0
+    if what == "hvsmr":
+        from chd_client.task import cohorts
+        try:
+            for n in cohorts.hvsmr_cases():
+                names = ", ".join(cohorts.hvsmr_truth(n)) or "normal"
+                print(f"{n:4d}  {names}")
+        except Exception as e:  # noqa: BLE001
+            print(f"run.sh: cannot read the HVSMR-2.0 data ({e}). Set its folder: ./setup.sh --hvsmr-dir "
+                  "/path/to/HVSMR-2.0", file=sys.stderr)
+            return 2
+        return 0
+    if what == "classes":
+        from chd_client.chd_classes import MANIFEST, SEGMENT_NAMES, load
+        print(f"Class codes for --truth (from {MANIFEST.relative_to(REPO)}). Any case; several: --truth VSD ToF;")
+        print("a normal heart: --truth normal; unknown diagnosis: leave --truth out.")
+        for title, pick in (("CT scans (ImageCHD's 16 classes)", "ct"), ("MRI scans (HVSMR-2.0's 20 classes)", "mri")):
+            print(f"\n{title}:")
+            for c in load():
+                if getattr(c, pick):
+                    also = f"  (also: {', '.join(c.also)})" if c.also else ""
+                    print(f"  {c.code:<7} {c.full_name}{also}")
+        print("\nNot class codes: " + ", ".join(SEGMENT_NAMES) + " are the segmentation structures "
+              "(e.g. PA = pulmonary artery).")
+        return 0
+    print("run.sh --list: one of imagechd, hvsmr, classes", file=sys.stderr)
+    return 2
+
+
+def help_text() -> str:
+    """./run.sh --help: run-episode's manual (run_episode.parser) with run.sh's own options."""
+    from chd_client import run_episode
+    ap = run_episode.parser(prog="./run.sh")
+    g = ap.add_argument_group("run.sh only")
+    g.add_argument("--yes", "-y", action="store_true",
+                   help="start a paid run without the question (for scripts; the plan is still printed)")
+    g.add_argument("--list", metavar="WHAT", choices=("imagechd", "hvsmr", "classes"),
+                   help="list the ImageCHD cases, the HVSMR-2.0 cases or the class codes, then stop")
+    return ap.format_help()
+
+
 def main(argv=None):
     args = list(sys.argv[1:] if argv is None else argv)
     if args[:1] == ["--own-launch"]:
         sys.exit(0 if own_launch(args[1] if len(args) > 1 else "") else 1)
+    if args[:1] == ["--list"]:
+        sys.exit(list_things(args[1] if len(args) > 1 else ""))
+    if args[:1] == ["--show-result"]:
+        show_result(args[1] if len(args) > 1 else "", args[2] if len(args) > 2 else None,
+                    len(args) > 3 and args[3] == "before-model")
+        sys.exit(0)
     if not args or {"-h", "--help"} & set(args):
-        print(__doc__.strip())
+        print(help_text())
         sys.exit(0 if args else 2)
+    args, dicom, modality_note = auto_modality(args)
     try:
         env, notes = prepare(args, os.environ)
     except RunShError as e:
@@ -188,8 +329,21 @@ def main(argv=None):
         sys.exit(2)
     for n in notes:
         print(n, file=sys.stderr)
+    from chd_client import run_episode
+    parsed = run_episode.parser(prog="run.sh").parse_args(without_yes(args))
+    problem = preflight_problem(parsed, dicom)
+    if problem:
+        print(f"run.sh: {problem}. Nothing ran.", file=sys.stderr)
+        sys.exit(2)
+    if not show_plan(parsed, options(args).yes, sys.stdin.isatty(), dicom=dicom, modality_note=modality_note,
+                     check=False):
+        sys.exit(1)
     env[NONCE_ENV] = env.get(LAUNCH_NONCE_ENV) or secrets.token_hex(16)
-    cmd = command(args, sys.platform.startswith("linux"))
+    import tempfile
+    fd, env["CHD_RUN_SH_RESULT"] = tempfile.mkstemp(prefix="chd_result_", suffix=".json")
+    os.close(fd)
+    os.unlink(env["CHD_RUN_SH_RESULT"])
+    cmd = command(without_yes(args), sys.platform.startswith("linux"))
     os.chdir(REPO)
     sys.stdout.flush()
     sys.stderr.flush()

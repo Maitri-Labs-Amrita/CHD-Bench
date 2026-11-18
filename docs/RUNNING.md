@@ -1,23 +1,36 @@
-# Running episodes: every option
+# Running CHD-Bench: every option
 
-`./run.sh` takes every option of `run-episode` (`uv run run-episode --help`), starts Slicer before the episode and
-always stops it afterwards. It refuses `--slicer-url`: for a Slicer you started yourself, use `uv run run-episode`
-([SETUP.md](SETUP.md#one-slicer-for-several-episodes)).
+`./run.sh --help` prints every option with one line each; this page has the details. `./run.sh` takes every option
+of `run-episode`, prints the run plan (and asks before a paid run), starts Slicer, does the run, always stops
+Slicer afterwards, and ends with the RESULT box. It refuses `--slicer-url`: for a Slicer you started yourself, use
+`uv run run-episode` ([SETUP.md](SETUP.md#one-slicer-for-several-episodes)).
+
+## run.sh's own options
+
+| Option | |
+|---|---|
+| `--yes`, `-y` | start a paid run without the question (for scripts). Without a terminal, a paid run needs it |
+| `--list imagechd\|hvsmr\|classes` | list the ImageCHD cases, the HVSMR-2.0 cases or the class codes for `--truth`, then stop |
 
 ## The case
 
 | Option | |
 |---|---|
-| `--imagechd ID` | an ImageCHD case (from runtime.json `imagechd_dir`), prepared for this episode only |
+| `--imagechd ID` | an ImageCHD case (from the folder `./setup.sh --imagechd-dir` saved), prepared for this run only |
 | `--hvsmr N` | an HVSMR-2.0 case (`pat<N>`): its MRI, profile and prompt `chd_mr_v1` |
 | `--volume SCAN` | any 3D scan: a NIfTI file (`.nii`, `.nii.gz`; used as it is), or a DICOM folder, a DICOM file or another image file (NRRD, MHA, ...), converted to NIfTI first. A folder is searched with every folder under it (other files, such as label maps, are ignored); with several DICOM series it uses the one with the most files; CT comes out in HU; the converted file holds no patient fields and is deleted after the run |
-| `--modality ct\|mr` | with `--volume`: `ct` (values in HU; `chd_ct_v1`) or `mr` (rescaled so the 99.5th percentile is 1000; `chd_mr_v1`). Default `ct` |
-| `--truth CLASSES` | with `--volume`: the true diagnosis, comma-separated class names or `normal`. Without it the run is not scored |
-| `--labels gt\|FILE` | `gt` (the dataset's own segmentation) or a NIfTI label map on the scan's grid. Required for `--arm 3d_seg` and `2d_seg`, refused for `--arm 3d` |
+| `--modality ct\|mr` | with `--volume`: `ct` (values in HU; `chd_ct_v1`) or `mr` (rescaled so the 99.5th percentile is 1000; `chd_mr_v1`). Default `ct`; for a DICOM scan, run.sh takes it from the DICOM header (Modality MR adds `--modality mr`) |
+| `--truth CODE ...` | with `--volume`: the true diagnosis as class codes from `config/chd_classes.csv` (`./run.sh --list classes`), separated by spaces or commas, any case, e.g. `--truth VSD ToF`; or `--truth normal`. The codes never equal a segmentation structure name (`PA` is the pulmonary artery; pulmonary atresia is `PuA`). Without `--truth` the run is not scored and the RESULT box shows the model's diagnosis only |
+| `--labels gt\|FILE` | `gt` (the dataset's own segmentation) or a NIfTI label map on the scan's grid. Leave it out to run on the scan alone (CT only). Before Slicer starts, run.sh checks the file: its values against the label map, and its grid against the scan's |
 | `--label-map MAP` | with a `--labels` file: label value to structure, e.g. `'1=LV,2=RV,3=LA,4=RA,6=Ao,7=PA'` (default: the ImageCHD codes, also for HVSMR and `--volume`) |
-| `--arm 3d_seg\|3d\|2d_seg` | `3d_seg` (default: the scan with segmentation shells), `3d` (CT only, no segmentation) or `2d_seg` (`3d_seg` without the 3D view or the 3D tools) |
+| `--no-3d` | slices only: no 3D view and no 3D tools (rotate, cut away). Needs `--labels` |
 
-Each case is copied into a temporary, anonymised case for the episode and deleted afterwards. The dataset folder is
+What the model gets: with `--labels`, the scan, the segmentation and the 3D view (the full setup); without
+`--labels`, the scan and the 3D view, no segmentation (CT only); with `--labels --no-3d`, the scan and the
+segmentation in the slices only. Batch configs ([slurm/README.md](../slurm/README.md)) name these setups with an
+`arm` key.
+
+Each case is copied into a temporary, anonymised case for the run and deleted afterwards. The dataset folder is
 only read.
 
 ## The prompt
@@ -28,8 +41,8 @@ The default prompts are in `prompts/` and listed in `prompts/registry.json` with
 |---|---|
 | `chd_ct_v1` | CT with a segmentation (ImageCHD classes) |
 | `chd_mr_v1` | MRI with a segmentation (HVSMR-2.0 classes) |
-| `chd_ct_nomask_v1` | CT without a segmentation (`--arm 3d`) |
-| `chd_ct_2dseg_v1`, `chd_mr_2dseg_v1` | CT / MRI with a segmentation and no 3D view (`--arm 2d_seg`) |
+| `chd_ct_nomask_v1` | CT without a segmentation (no `--labels`) |
+| `chd_ct_2dseg_v1`, `chd_mr_2dseg_v1` | CT / MRI with a segmentation and no 3D view (`--no-3d`) |
 
 `--prompt <name or file>` uses another registered prompt or your own file. Your text is used as written;
 `{max_steps}` and `{image_note}` are filled in when present. Its class list must match the profile's report:
@@ -65,7 +78,7 @@ changed text under a new name.
 
 ## Resuming
 
-`--resume <run folder>` continues an episode that the infrastructure stopped (a crash, a time limit) from its last
+`--resume <run folder>` continues a run that the infrastructure stopped (a crash, a time limit) from its last
 complete model turn.
 
 ## Other
@@ -75,12 +88,27 @@ complete model turn.
 
 ## Stop reasons
 
-`submitted`, `step_budget`, `cost_cap`, `cost_unknown`, `no_tool_call`, `environment_error`, `rate_limited`,
-`model_refusal`, `model_max_tokens`, `model_<other stop>`, `runner_exception`, `case_identity_mismatch`, `terminated`
-(SIGTERM / SIGINT).
+The RESULT box says each one in words (`chd_client.ux.STOP_TEXT`); `summary.json` keeps the code.
+
+| Code | Meaning |
+|---|---|
+| `submitted` | the model submitted its diagnosis |
+| `step_budget` | the model used all its tool calls without a diagnosis (raise `--max-steps`) |
+| `cost_cap` | the cost limit was reached before a diagnosis (raise `--cost-cap`) |
+| `cost_unknown` | the provider did not report a cost, so the run stopped to protect the budget |
+| `no_tool_call` | the model answered without using a tool or submitting a diagnosis |
+| `environment_error` | 3D Slicer failed during the run |
+| `rate_limited` | the provider refused more requests: wait and run again |
+| `model_refusal` | the model refused the task |
+| `model_max_tokens` | the model's answer was cut off at its output limit (raise `--max-tokens`) |
+| `model_<other stop>` | the model ended its answer in another unexpected way |
+| `runner_exception` | an error in CHD-Bench |
+| `case_identity_mismatch` | Slicer showed a different case than the one prepared |
+| `terminated` | the run was stopped (SIGTERM / SIGINT) |
 
 ## Exit codes
 
-`run-episode`: 0 only when the model's report was accepted. `./run.sh` adds: 10 when Slicer did not start, 11 when
-the episode succeeded but Slicer did not stop, 2 for a usage error or a model that cannot run (a missing key or
-price), and 128 + the signal number when a signal stopped it.
+`run-episode`: 0 only when the model's report was accepted; 2 when the case cannot be prepared. `./run.sh` adds: 1
+when the plan was not confirmed (nothing ran), 10 when Slicer did not start, 11 when the run succeeded but Slicer
+did not stop, 2 for a usage error, a missing scan or dataset folder, a bad segmentation file, or a model that cannot
+run (a missing key or price), and 128 + the signal number when a signal stopped it.

@@ -113,6 +113,35 @@ def check_data(root, case=None) -> tuple[int, int]:
     return (int(case) if case is not None else ids[0]), len(ids)
 
 
+def check_hvsmr(root) -> tuple[Path, Path, int]:
+    """(images folder, clinical table, number of cases) of an HVSMR-2.0 download. root: the dataset folder (with
+    orig/ and hvsmr_clinical.csv) or its orig/ folder. ValueError names what is missing."""
+    root = Path(root).expanduser().resolve()
+    if not root.is_dir():
+        raise ValueError(f"no such folder: {root}")
+    images = root / "orig" if (root / "orig").is_dir() else root
+    table = next((p for p in (root / "hvsmr_clinical.csv", images.parent / "hvsmr_clinical.csv") if p.is_file()), None)
+    n = len(list(images.glob("pat*_orig.nii.gz")))
+    missing = []
+    if not n:
+        missing.append("orig/pat<N>_orig.nii.gz (no case image)")
+    if n and not any(images.glob("pat*_orig_seg.nii.gz")):
+        missing.append("orig/pat<N>_orig_seg.nii.gz (no segmentation)")
+    if table is None:
+        missing.append("hvsmr_clinical.csv (the diagnoses)")
+    if missing:
+        raise ValueError(f"{root} is not an HVSMR-2.0 folder: it lacks {'; '.join(missing)}")
+    return images, table, n
+
+
+def set_paths(path, updates: dict) -> str:
+    """Set entries of config/paths.local.json (other entries are kept); returns write_if_changed's note."""
+    old = read_json(path)
+    new = {"paths": {}} if old is None else json.loads(json.dumps(old))
+    new.setdefault("paths", {}).update({k: str(v) for k, v in updates.items()})
+    return write_if_changed(path, old, new)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m chd_client.setup_config", description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -131,7 +160,36 @@ def main(argv=None):
     d = sub.add_parser("check-data")
     d.add_argument("--dir", required=True)
     d.add_argument("--case", type=int)
+    h = sub.add_parser("hvsmr")
+    h.add_argument("--dir", required=True)
+    h.add_argument("--path", required=True, help="config/paths.local.json")
+    h.add_argument("--check-only", action="store_true")
+    sub.add_parser("hvsmr-current")
+    sub.add_parser("keys")
     a = ap.parse_args(argv)
+    if a.cmd == "hvsmr-current":
+        from chd_client import paths
+        try:
+            images, _, n = check_hvsmr(paths.get("hvsmr_images"))
+        except Exception:  # noqa: BLE001
+            return 1
+        print(f"{images.parent if images.name == 'orig' else images}\t{n}")
+        return 0
+    if a.cmd == "keys":
+        from chd_client import env_file
+        names = ("ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "OPENAI_API_KEY", "CHD_LOCAL_BASE_URL")
+        found = set(env_file.read_env_file()) | set(os.environ)
+        print(" ".join(n for n in names if n in found))
+        return 0
+    if a.cmd == "hvsmr":
+        try:
+            images, table, n = check_hvsmr(a.dir)
+        except ValueError as e:
+            print(e, file=sys.stderr)
+            return 1
+        note = "" if a.check_only else set_paths(a.path, {"hvsmr_images": images, "hvsmr_clinical": table})
+        print(f"{images.parent if images.name == 'orig' else images}\t{n}\t{note}")
+        return 0
 
     if a.cmd == "slicer-mcp":
         print(slicer_mcp_note())

@@ -178,6 +178,7 @@ def test_main_gives_the_episode_shell_a_launch_nonce(tmp_path, monkeypatch):
     monkeypatch.setattr(run_sh.os, "execvpe", lambda f, cmd, env: seen.append(env))
     monkeypatch.setattr(run_sh.os, "chdir", lambda p: None)
     monkeypatch.setattr(run_sh.os, "environ", clean_env())
+    monkeypatch.setattr("chd_client.ux.missing_data", lambda a: None)  # no ImageCHD folder in the test
     args = ["--imagechd", "1001", "--labels", "gt", "--dry-run-scripted"]
     run_sh.main(args)
     run_sh.main(args)
@@ -215,14 +216,14 @@ def test_own_launch_is_the_state_files_launch_id(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("args, msg", [
-    (["--labels", "gt", "--dry-run-scripted"], "a case is required"),
+    (["--labels", "gt", "--dry-run-scripted"], "a scan is required"),
     (["--imagechd", "", "--labels", "gt", "--dry-run-scripted"], "--imagechd '' is not a case id"),
     (["--imagechd=abc", "--labels", "gt", "--dry-run-scripted"], "--imagechd 'abc' is not a case id"),
 ])
 def test_prepare_refuses_a_bad_case_id_before_slicer_starts(tmp_path, args, msg):
     with pytest.raises(run_sh.RunShError, match=msg) as e:
         run_sh.prepare(args, clean_env(), env_path=tmp_path / "none")
-    assert "chd_client.task.imagechd list" in str(e.value) and "Nothing ran" in str(e.value)
+    assert "./run.sh --list imagechd" in str(e.value) and "Nothing ran" in str(e.value)
     run_sh.prepare(["--imagechd=1001", "--labels", "gt", "--dry-run-scripted"], clean_env(),
                    env_path=tmp_path / "none")
 
@@ -267,7 +268,12 @@ def test_main_usage(capsys):
     assert e.value.code == 0 and "./run.sh --imagechd" in capsys.readouterr().out
     with pytest.raises(SystemExit) as e:
         run_sh.main(["--imagechd", "1001", "-h"])
-    assert e.value.code == 0 and "uv run run-episode --help" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert e.value.code == 0 and "the scan (give exactly one)" in out and "--truth CODE" in out
+    assert "--yes, -y" in out and "./run.sh --list classes" in out
+
+
+SHOW = "run --no-sync python -m chd_client.run_sh --show-result "
 
 
 def fake_uv(tmp_path, launch=0, episode=0, stop=0, stop_says="", own=1):
@@ -297,7 +303,9 @@ def inner(tmp_path, **codes):
     env[run_sh.NONCE_ENV] = "n0nce"
     p = subprocess.run(run_sh.command(["--imagechd", "1001", "--labels", "gt"], linux=False), env=env,
                        capture_output=True, text=True)
-    return p.returncode, log.read_text().splitlines(), p.stderr, p.stdout
+    calls = log.read_text().splitlines()
+    assert calls[-1].startswith(SHOW), "the result box is printed last, after Slicer stops"
+    return p.returncode, calls[:-1], p.stderr, p.stdout
 
 
 @pytest.mark.parametrize("codes, rc, ran_episode, stopped", [
@@ -325,7 +333,7 @@ def test_episode_shell_gives_the_nonce_to_the_launch_only(tmp_path):
     assert got == 0 and calls[0].endswith("launch --no-main-window")
     assert calls[1].startswith("run --no-sync run-episode")
     assert nonces[0] == "n0nce unset"
-    assert nonces[1:] == ["unset unset", "unset unset"]
+    assert len(nonces) == 4 and set(nonces[1:]) == {"unset unset"}  # episode, stop, result box
 
 
 def test_episode_shell_stops_its_own_slicer_after_a_failed_launch(tmp_path):
@@ -374,7 +382,8 @@ def test_episode_shell_stops_its_own_slicer_after_a_signal_during_the_launch(tmp
     assert p.returncode == rc and log.read_text().splitlines() == [
         "run --no-sync chd-slicer launch --no-main-window",
         "run --no-sync python -m chd_client.run_sh --own-launch n0nce",
-        "run --no-sync chd-slicer launch --stop"]
+        "run --no-sync chd-slicer launch --stop",
+        SHOW + " stopped by a signal while 3D Slicer was starting before-model"]
     assert "signal received: Slicer's start ends" in err
 
 
@@ -418,7 +427,7 @@ exit 0
     os.killpg(p.pid, 15)
     _, err = p.communicate(timeout=30)
     calls = log.read_text().splitlines()
-    assert p.returncode == 1 and calls[-2:] == ["terminated", "run --no-sync chd-slicer launch --stop"]
+    assert p.returncode == 1 and calls[-3:] == ["terminated", "run --no-sync chd-slicer launch --stop", SHOW]
     assert "signal received" in err
 
 

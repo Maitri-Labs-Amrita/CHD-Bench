@@ -183,8 +183,8 @@ CASE_REQUIRED = "one of the arguments --imagechd --hvsmr --volume is required"
 
 
 @pytest.mark.parametrize("argv,msg", [
-    ([], "required: --labels"),
-    (["--imagechd", "1008"], "required: --labels"),
+    ([], CASE_REQUIRED),
+    (["--hvsmr", "1008"], "this MRI scan has no segmentation: add --labels gt"),
     (["--labels", "gt"], CASE_REQUIRED),
     (["--imagechd", "1008", "--labels", "gt", "--dicom", "d"], "unrecognized arguments: --dicom"),
     (["--imagechd", "1008", "--labels", "gt", "--hvsmr", "12"], "not allowed with argument --imagechd"),
@@ -193,7 +193,8 @@ CASE_REQUIRED = "one of the arguments --imagechd --hvsmr --volume is required"
     (["--case", "c", "--labels", "gt"], CASE_REQUIRED),
 ])
 def test_cli_needs_a_case_and_its_labels(argv, msg, capsys):
-    """One case (ImageCHD, HVSMR or a --volume scan) and --labels are required; no stored or DICOM case."""
+    """One case (ImageCHD, HVSMR or a --volume scan) is required, and --labels for an MRI scan; no stored or
+    DICOM case."""
     with pytest.raises(SystemExit):
         main(argv + ["--dry-run-scripted"])
     assert msg in capsys.readouterr().err
@@ -440,18 +441,19 @@ def test_a_case_records_the_slicer_mcp_source(tmp_path, monkeypatch):
 import numpy as np  # noqa: E402 (the DICOM conversion tests)
 
 
-def write_dicom_series(folder, values, spacing=(0.5, 0.6, 1.25), origin=(-10.0, 20.0, 30.0), uid="1.2.826.0.1.3680043.2.1125.1"):
+def write_dicom_series(folder, values, spacing=(0.5, 0.6, 1.25), origin=(-10.0, 20.0, 30.0),
+                       uid="1.2.826.0.1.3680043.2.1125.1", modality="CT"):
     """A DICOM CT series of values (z, y, x; HU, stored as signed 16 bit), one file per slice. GDCM's writer sets
     the C locale (Python's text files would then default to ASCII in later tests), so the locale is restored."""
     import locale
     saved = locale.setlocale(locale.LC_ALL)
     try:
-        return _write_dicom_series(folder, values, spacing, origin, uid)
+        return _write_dicom_series(folder, values, spacing, origin, uid, modality)
     finally:
         locale.setlocale(locale.LC_ALL, saved)
 
 
-def _write_dicom_series(folder, values, spacing, origin, uid):
+def _write_dicom_series(folder, values, spacing, origin, uid, modality="CT"):
     import SimpleITK as sitk
     folder.mkdir(parents=True, exist_ok=True)
     w = sitk.ImageFileWriter()
@@ -460,7 +462,7 @@ def _write_dicom_series(folder, values, spacing, origin, uid):
         sl = sitk.GetImageFromArray(values[z:z + 1].astype(np.int16))
         sl.SetSpacing(spacing)
         sl.SetOrigin((origin[0], origin[1], origin[2] + z * spacing[2]))
-        for tag, v in (("0008|0060", "CT"), ("0020|000e", uid), ("0020|000d", uid + ".9"), ("0020|0013", str(z + 1)),
+        for tag, v in (("0008|0060", modality), ("0020|000e", uid), ("0020|000d", uid + ".9"), ("0020|0013", str(z + 1)),
                        ("0020|0032", "\\".join(map(str, (origin[0], origin[1], origin[2] + z * spacing[2])))),
                        ("0020|0037", "1\\0\\0\\0\\1\\0"),
                        ("0008|0018", f"{uid}.{z + 1}"), ("0010|0010", "Doe^Jane")):

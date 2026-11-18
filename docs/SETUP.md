@@ -10,13 +10,15 @@ setup with one scripted episode. Run it again at any time: every step skips what
 | Option | |
 |---|---|
 | `--imagechd-dir DIR` | the ImageCHD folder (else `$CHD_IMAGECHD_DIR`, the config's `imagechd_dir`, or `data/ImageCHD_dataset/`). Without data the check is skipped and the script exits 3. |
+| `--hvsmr-dir DIR` | the HVSMR-2.0 folder (with `orig/` and `hvsmr_clinical.csv`, or the `orig/` folder itself): checked and saved in `config/paths.local.json`. Optional; without it, an existing entry there is checked and shown. |
 | `--slicer PATH` | an existing Slicer 5.10.0 (the launcher, e.g. `.../Slicer-5.10.0-linux-amd64/Slicer`). Without it, Linux runs `slicer-mcp setup-headless` (Xvfb, a checksum-verified Slicer download, missing system libraries, no sudo); macOS uses `/Applications/Slicer.app`. |
 | `--xvfb PATH`, `--lib-dir DIR` | Linux, with `--slicer`: the Xvfb and extra library folders of an existing headless install. |
 | `--shared DIR` | Linux, without `--slicer`: install Xvfb and Slicer into one shared folder, so a team installs once. |
 | `--check-case ID`, `--skip-check` | the ImageCHD case of the check (default: the first), or no check. |
 
-Exit code: 0 = set up and checked (or `--skip-check`); 3 = set up but not checked (no ImageCHD data); anything else =
-failed (the summary says why).
+Setup ends with a SETUP RESULT box (Python, Slicer, the two datasets, the model keys found in `.env` by name, the
+free test run) and the next commands. Exit code: 0 = set up and checked (or `--skip-check`); 3 = set up but not
+checked (no ImageCHD data); anything else = failed (the box and the lines under it say why).
 
 ## The slicer-mcp dependency
 

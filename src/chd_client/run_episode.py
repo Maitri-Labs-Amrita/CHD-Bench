@@ -604,6 +604,10 @@ async def _run_episode(case_id, arm, model, target, *, max_steps=None, cost_cap_
                         finally:
                             env_s += time.perf_counter() - t
                         n_steps += 1
+                        if echo:
+                            from chd_client.ux import step_line
+                            echo(step_line(n_steps, max_steps, call.name, cost, time.perf_counter() - t_start,
+                                           obs.is_error))
                         sent = sent or not obs.local
                         left = max_steps - n_steps
                         obs = with_calls_left(obs, left)
@@ -755,6 +759,16 @@ def metrics_line(m: dict) -> str:
 def diagnosis_line(dx: dict) -> str:
     """'diagnosis DORV + VSD vs truth DORV: exact 0, F1 0.67' (env eval_diagnosis output), or its error."""
     from chd_client.diagnosis import SHORT
+    if "exact_match" not in dx and "predicted" in dx:
+        conf = dx.get("confidence") or {}
+
+        def called(c):
+            return SHORT.get(c, c) + (f" ({conf[c]:.2f})" if conf.get(c) is not None else "")
+        pred = " + ".join(called(c) for c in dx["predicted"]) or f"none of {dx.get('n_classes', 16)}"
+        nc = dx.get("normal_call")
+        normal = (f" | normal called {'yes' if nc['present'] else 'no'} ({nc['confidence']:.2f})"
+                  if nc and nc.get("confidence") is not None else "")
+        return f"diagnosis (model): {pred}{normal} [not scored: {dx.get('skipped', 'no truth')}]"
     if "exact_match" not in dx:
         return f"diagnosis: {dx.get('skipped') or dx.get('error') or 'n/a'}"
     n_cls = 16 if dx.get("dataset") in (None, "ImageCHD") else len(dx.get("per_class") or {})
@@ -810,18 +824,23 @@ class PrelaunchError(Exception):
 
 
 class EpisodeParser(argparse.ArgumentParser):
-    """run-episode's parser: --labels is required for the 3d_seg and 2d_seg arms (not the 3d arm). The arm is read first, so a 3d_seg command
-    without --labels gets argparse's own "required" error; the 3d arm's refusal of --labels is
-    in prelaunch."""
+    """run-episode's parser. The arm (the viewing setup; an internal name, never shown to people) follows the
+    options: --labels gives 3d_seg (the scan, the segmentation and the 3D view), no --labels gives 3d (the scan and
+    the 3D view, CT only), --no-3d gives 2d_seg (slices and the segmentation, no 3D view). --arm (hidden; batch
+    scripts) sets it directly. arm_auto records that it was chosen from the options. prelaunch refuses a setup that
+    needs --labels without it, and the no-segmentation setup on an MRI scan."""
 
     def parse_known_args(self, args=None, namespace=None):
-        pre = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
-        pre.add_argument("--arm", default=prompt_registry.ARM)
-        arm = pre.parse_known_args(args)[0].arm
-        for act in self._actions:
-            if act.dest == "labels":
-                act.required = arm != NOMASK_ARM
-        return super().parse_known_args(args, namespace)
+        a, rest = super().parse_known_args(args, namespace)
+        no_3d = getattr(a, "no_3d", False)
+        if getattr(a, "arm", "x") is None:
+            a.arm = NO3D_ARM if no_3d else (NOMASK_ARM if getattr(a, "labels", None) is None else prompt_registry.ARM)
+            a.arm_auto = True
+        else:
+            if no_3d and a.arm != NO3D_ARM:
+                self.error(f"--no-3d and --arm {a.arm} disagree: leave out --arm")
+            a.arm_auto = False
+        return a, rest
 
 
 def cohort_of(a):
@@ -829,76 +848,135 @@ def cohort_of(a):
     from chd_client.task import cohorts
     if getattr(a, "volume", None) is not None:
         c = cohorts.custom(a.modality)
-        truth = None if a.truth is None else cohorts.parse_truth(a.truth, c.classes)
+        scan = "a CT scan" if a.modality == "ct" else "an MRI scan"
+        truth = None if a.truth is None else cohorts.parse_truth(a.truth, c.classes, scan)
         return cohorts.custom(a.modality, truth)
     return next((c for k, c in cohorts.COHORTS.items() if getattr(a, k, None) is not None), None)
 
 
+def _formatter(prog):
+    import shutil
+    width = max(80, min(110, shutil.get_terminal_size((100, 24)).columns))
+    return argparse.RawDescriptionHelpFormatter(prog, max_help_position=26, width=width)
+
+
+HELP_DESCRIPTION = """\
+Run CHD-Bench once: a vision-language model looks at a heart scan in 3D Slicer and names the congenital heart
+defects it sees. Every option below has a default except the scan."""
+
+HELP_EPILOG = """\
+examples:
+  ./run.sh --imagechd 1001 --labels gt --dry-run-scripted          free test run (no model, no cost)
+  ./run.sh --imagechd 1001 --labels gt --model claude-opus-5-5     ImageCHD case 1001 with Claude Opus (paid)
+  ./run.sh --hvsmr 3 --labels gt --model openrouter:google/gemini-4-argon   HVSMR-2.0 case 3 through OpenRouter
+  ./run.sh --volume ~/scans/patient7 --model openrouter:google/gemini-4-argon
+                                                                   your own scan (a DICOM folder), no score
+  ./run.sh --volume scan.nii.gz --labels seg.nii.gz --truth VSD ToF --model claude-opus-5-5
+                                                                   your own scan with its segmentation, scored
+  ./run.sh --imagechd 1001 --labels gt --no-3d --model claude-opus-5-5   slices only, no 3D view
+
+what the model gets:
+  with --labels              the scan, the segmentation and the 3D view: the full setup
+  without --labels           the scan and the 3D view, no segmentation (CT only)
+  with --labels --no-3d      the scan and the segmentation, slices only
+
+what you see:
+  1. The run plan: the scan, the segmentation, the truth, the model and the cost limit, with a WARNING for
+     anything missing. For a paid model it asks "Start this paid run? [y/N]" (--yes skips the question).
+  2. One progress line per step: what the model did, the cost so far and the time.
+  3. The RESULT box: the model's diagnosis, the true diagnosis and the score when there is one, the cost and the
+     time, and the path of report.pdf (every step with its images).
+
+lists:
+  ./run.sh --list imagechd     ImageCHD cases and their diagnoses
+  ./run.sh --list hvsmr        HVSMR-2.0 cases and their diagnoses
+  ./run.sh --list classes      the class codes for --truth (config/chd_classes.csv)
+
+more: README.md (setup, data, your own scans, your own GPU), docs/RUNNING.md, docs/MODELS.md"""
+
+
 def parser(prog="run-episode") -> argparse.ArgumentParser:
-    """run-episode's options (./run.sh parses its arguments with this too, before Slicer starts)."""
-    ap = EpisodeParser(prog=prog, description="run one CHD episode", allow_abbrev=False)
-    case = ap.add_mutually_exclusive_group(required=True)
+    """run-episode's options (./run.sh parses its arguments with this too, before Slicer starts). The groups and the
+    help texts are the manual that ./run.sh --help prints."""
+    ap = EpisodeParser(prog=prog, description=HELP_DESCRIPTION, epilog=HELP_EPILOG, allow_abbrev=False,
+                       formatter_class=_formatter,
+                       usage=f"{prog} --imagechd ID | --hvsmr N | --volume SCAN  [options]")
+    g = ap.add_argument_group("the scan (give exactly one)")
+    case = g.add_mutually_exclusive_group(required=True)
     case.add_argument("--imagechd", type=int, metavar="ID",
-                      help="an ImageCHD case id (runtime.json imagechd_dir): prepared for this episode only")
+                      help="an ImageCHD case (CT), e.g. 1001. List: ./run.sh --list imagechd")
     case.add_argument("--hvsmr", type=int, metavar="N",
-                      help="an HVSMR-2.0 case (pat<N>): its MRI, profile chd_mr_v1 and prompt chd_mr_v1")
-    case.add_argument("--volume", metavar="FILE",
-                      help="any 3D scan: a NIfTI file (.nii, .nii.gz; used as it is), or a DICOM folder, a DICOM file or "
-                           "another image file (NRRD, MHA, ...), converted to NIfTI first; see --modality, --truth "
-                           "and --label-map")
-    ap.add_argument("--modality", choices=("ct", "mr"), default="ct",
-                    help="with --volume: ct (values in HU; profile and prompt chd_ct_v1) or mr (rescaled so the "
-                         "99.5th percentile is 1000; profile and prompt chd_mr_v1). Default: ct")
-    ap.add_argument("--truth", metavar="CLASSES",
-                    help="with --volume: the true diagnosis, as comma-separated class names or 'normal'; without it "
-                         "the run is not scored")
-    ap.add_argument("--label-map", metavar="MAP",
-                    help="with a --labels file: label value to structure, e.g. '1=LV,2=RV,3=LA,4=RA,6=Ao,7=PA' "
-                         "(default: the ImageCHD codes, also for HVSMR and --volume)")
-    ap.add_argument("--arm", default="3d_seg", choices=ARMS,
-                    help="3d_seg (default: the scan with the segmentation shells of --labels), 3d (the scan only, "
-                         "no segmentation; CT only, no --labels) or 2d_seg (3d_seg without the 3D view or the 3D tools: "
-                         "the slice views and the segmentation of --labels)")
-    ap.add_argument("--labels", required=True, help="'gt' (the dataset's own segmentation; ImageCHD and HVSMR) or a "
-                    "NIfTI label map on the scan's grid: the segmentation shells shown to the model. Required for "
-                    "--arm 3d_seg and 2d_seg, refused for --arm 3d")
-    ap.add_argument("--prompt", metavar="NAME_OR_FILE",
-                    help="a prompt name from prompts/registry.json, or the path of your own prompt file (default: "
-                         "the dataset's prompt)")
-    ap.add_argument("--model", default=DEFAULT_MODEL,
-                    help="<provider>:<model> (config/providers.json: openrouter:<slug>, local:<name>, openai:<model>, "
-                         "...; split on the first ':') or an Anthropic model id; an Anthropic id that contains ':' is "
-                         "written anthropic:<id>")
-    ap.add_argument("--providers", metavar="FILE",
-                    help="the provider registry (default: $CHD_PROVIDERS, else config/providers.json; its "
-                         ".local.json overlay is merged)")
-    ap.add_argument("--max-steps", type=int, default=None, help=f"default: {DEFAULT_MAX_STEPS}")
-    ap.add_argument("--cost-cap", type=_cost_cap, default=3.0, help="USD per episode, or 'none' for no cap (step limit only)")
-    ap.add_argument("--effort", default="medium",
-                    help="Anthropic output_config.effort; OpenRouter reasoning.effort; an openai_compatible provider's "
-                         "effort parameter (none: not sent)")
-    ap.add_argument("--max-tokens", type=int, default=None,
-                    help="output cap per model turn (default 32000, the same for every model so runs compare; a local: model takes its gateway's "
-                         "capabilities.max_output_tokens, and a larger value is refused)")
-    ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--image-window", type=int, default=None,
-                    help="keep only the last N observation turns' images (default: keep all, append-only)")
-    ap.add_argument("--max-images", type=_max_images, default=None, metavar="N",
-                    help="send at most the newest N images per request; older ones become a text placeholder "
-                         "(default: no cap; a local: model takes its gateway's capabilities.max_images)")
-    ap.add_argument("--image-cap-block", type=_max_images, default=None, metavar="N",
-                    help="with --max-images: over the cap, drop the oldest images N at a time instead of one by one, "
-                         "so the request start stays the same between drops and the provider's prompt cache hits "
-                         "(N at most the cap; default: one by one)")
-    ap.add_argument("--no-image-note", action="store_true",
-                    help="keep the system prompt without the image note even with --max-images or --image-window "
-                         "(the prompt then matches an uncapped run's; removed images still get their placeholder)")
-    ap.add_argument("--runtime", help="runtime.json (default: config/runtime.local.json, else config/runtime.json)")
-    ap.add_argument("--slicer-url")
-    ap.add_argument("--dry-run-scripted", action="store_true", help="scripted model, no API calls")
-    ap.add_argument("--resume", metavar="RUN_DIR",
-                    help="continue an episode that the infrastructure stopped (its run folder: reports/runs/<name> or "
-                         "runs/<episode id>) from its last complete model turn; see chd_client.resume")
+                      help="an HVSMR-2.0 case (MRI), e.g. 3. List: ./run.sh --list hvsmr")
+    case.add_argument("--volume", metavar="SCAN",
+                      help="your own scan: a folder with DICOM files (searched to any depth; the series with the "
+                           "most files is used), a DICOM file, or a NIfTI, NRRD or MHA file. Converted to NIfTI "
+                           "when needed. No dataset is needed for this")
+    g.add_argument("--modality", choices=("ct", "mr"), default="ct",
+                   help="with --volume: ct (default; values in HU) or mr (MRI)")
+
+    g = ap.add_argument_group("what the model sees")
+    g.add_argument("--labels", default=None, metavar="gt|FILE",
+                   help="the heart segmentation, shown to the model as 3D shells of six structures (LV, RV, LA, RA, "
+                        "Ao, PA), with tools to show, hide and outline them: gt = the dataset's own (ImageCHD, "
+                        "HVSMR), or a label-map file (NIfTI) on the same grid as the scan. Leave it out and the "
+                        "model sees the scan alone, with the 3D view and no segmentation (CT only)")
+    g.add_argument("--label-map", metavar="MAP",
+                   help="with a --labels file: which label value is which structure, e.g. "
+                        "1=LV,2=RV,3=LA,4=RA,6=Ao,7=PA (the default: ImageCHD's codes). Other values are not shown")
+    g.add_argument("--no-3d", action="store_true",
+                   help="slices only: no 3D view and no 3D tools (rotate, cut away). Needs --labels")
+    g.add_argument("--arm", default=None, choices=ARMS, help=argparse.SUPPRESS)
+
+    g = ap.add_argument_group("the true diagnosis (to score the run)")
+    g.add_argument("--truth", metavar="CODE", nargs="+",
+                   help="with --volume only (dataset cases have their own): the true diagnosis as class codes, "
+                        "e.g. --truth VSD ToF (or VSD,ToF), or --truth normal. Codes: ./run.sh --list classes. "
+                        "Leave it out when it is not known: you get the model's diagnosis without a score")
+
+    g = ap.add_argument_group("model, cost and limits")
+    g.add_argument("--model", default=DEFAULT_MODEL,
+                   help=f"the model (default {DEFAULT_MODEL}, paid). An Anthropic model id (key ANTHROPIC_API_KEY), "
+                        "openrouter:<vendor>/<model> (OPENROUTER_API_KEY), openai:<model> (OPENAI_API_KEY), or "
+                        "local:<name> for a model on your own GPU (docs/GATEWAY.md, no API cost). Keys go in .env")
+    g.add_argument("--dry-run-scripted", action="store_true",
+                   help="no model: a fixed script takes a few steps and submits a 'normal' diagnosis. Free; "
+                        "checks that Slicer, the scan and the report work")
+    g.add_argument("--cost-cap", type=_cost_cap, default=3.0, metavar="USD",
+                   help="stop the run when it has cost this many US dollars (default 3; 'none' = no limit)")
+    g.add_argument("--max-steps", type=int, default=None, metavar="N",
+                   help=f"stop after N steps; a step is one action of the model in the viewer (default "
+                        f"{DEFAULT_MAX_STEPS})")
+    g.add_argument("--effort", default="medium",
+                   help="the model's reasoning effort, passed to the provider (default medium; e.g. low, high; "
+                        "none = not sent)")
+
+    g = ap.add_argument_group("advanced (the defaults are the benchmark's settings)")
+    g.add_argument("--prompt", metavar="NAME_OR_FILE",
+                   help="another prompt: a name from prompts/registry.json or a file (default: the scan's prompt)")
+    g.add_argument("--providers", metavar="FILE",
+                   help="another provider list (default: config/providers.json with config/providers.local.json)")
+    g.add_argument("--max-tokens", type=int, default=None, metavar="N",
+                   help="the model's output limit per turn (default 32000; a local: model's gateway may set a "
+                        "lower one)")
+    g.add_argument("--seed", type=int, default=0, help="the random seed (default 0)")
+    g.add_argument("--image-window", type=int, default=None, metavar="N",
+                   help="keep only the images of the last N turns in the conversation (default: all)")
+    g.add_argument("--max-images", type=_max_images, default=None, metavar="N",
+                   help="send at most the newest N images per request; older ones become a text note (default: "
+                        "no limit; a local: model takes its gateway's limit)")
+    g.add_argument("--image-cap-block", type=_max_images, default=None, metavar="N",
+                   help="with --max-images: drop old images N at a time, so the provider's prompt cache keeps "
+                        "working (default: one at a time)")
+    g.add_argument("--no-image-note", action="store_true",
+                   help="with --max-images or --image-window: leave the note about removed images out of the "
+                        "system prompt")
+    g.add_argument("--runtime", metavar="FILE",
+                   help="another runtime file (default: config/runtime.local.json, else config/runtime.json)")
+    g.add_argument("--slicer-url", metavar="URL",
+                   help="use a Slicer you started yourself (run-episode only: ./run.sh starts its own)")
+    g.add_argument("--resume", metavar="RUN_DIR",
+                   help="continue a run that was cut off (its folder in reports/runs/) from its last complete "
+                        "model turn")
     return ap
 
 
@@ -918,7 +996,14 @@ def prelaunch(a) -> tuple:
         raise PrelaunchError("--modality and --truth go with --volume")
     if a.label_map is not None and (a.labels in (None, "gt")):
         raise PrelaunchError("--label-map goes with a --labels file")
+    if a.arm != NOMASK_ARM and a.labels is None:
+        what = "slices only (--no-3d) also shows" if a.arm == NO3D_ARM else "this setup shows"
+        raise PrelaunchError(f"{what} the model a segmentation: add --labels gt (the dataset's own) or --labels "
+                             "<label-map file>")
     if a.arm == NOMASK_ARM:
+        if coh is not None and coh.modality != "ct" and getattr(a, "arm_auto", False):
+            raise PrelaunchError("this MRI scan has no segmentation: add --labels gt (HVSMR) or --labels <label-map "
+                                 "file>. Running on the scan alone (no --labels) works for CT only")
         if a.labels is not None:
             raise PrelaunchError(f"--arm {NOMASK_ARM} shows the model the scan only, with no segmentation: leave out "
                                  f"--labels {a.labels} (the segmentation shells are for --arm 3d_seg)")
@@ -986,7 +1071,19 @@ def main(argv=None):
     else:
         case_cm = temporary_imagechd_case(a.imagechd, a.runtime, labels=a.labels, label_map=a.label_map,
                                           **({"profile": profile} if profile is not None else {}))
-    with case_cm as tc:
+    dest = None
+    from chd_client import paths as _paths
+    from chd_client.dicom_run import DicomRunError
+    from chd_client.task.cohorts import CohortError
+    from chd_client.task.imagechd import ImageCHDError
+    try:
+        tc_enter = case_cm.__enter__()
+    except (DicomRunError, CohortError, ImageCHDError, _paths.PathsError, FileNotFoundError) as ex:
+        msg = str(ex).strip()
+        print(f"run-episode: the case could not be prepared: {msg}", file=sys.stderr, flush=True)
+        show_result(None, f"the case could not be prepared: {msg}", before_model=True)
+        sys.exit(2)
+    with _entered(case_cm, tc_enter) as tc:
         if prior is not None:
             was = next((r.get("identity") or {} for r in prior.first if r.get("kind") == "observation"), {})
             if was.get("case_id") not in (None, tc.case_id):
@@ -1006,8 +1103,9 @@ def main(argv=None):
             err, summary = e, summary_of(e)
         signal.signal(signal.SIGTERM, lambda *_: print("SIGTERM during finish_run: ignored, finishing", flush=True))
         if summary is not None:
-            finish_run(summary, traces, imagechd=tc.has_truth and coh is None, runtime=tc.runtime, cohort=coh)
+            dest = finish_run(summary, traces, imagechd=tc.has_truth and coh is None, runtime=tc.runtime, cohort=coh)
     code = 0 if summary is not None and summary["stop_reason"] == "submitted" else 1
+    show_result(dest, None if err is None else f"{type(err).__name__}: {err}")
     if err is not None and summary is None:
         raise err
     if err is not None:
@@ -1017,6 +1115,31 @@ def main(argv=None):
         sys.stderr.flush()
         os._exit(code)
     sys.exit(code)
+
+
+def show_result(dest, error=None, environ=os.environ, before_model=False):
+    """The result box (chd_client.ux.result_box). Under ./run.sh ($CHD_RUN_SH_RESULT set) only the run folder is
+    written there, and run.sh prints the box after Slicer stops, so it is the last thing on the screen."""
+    from chd_client import ux
+    if environ.get("CHD_RUN_SH_RESULT"):
+        ux.write_result_pointer(dest, error, environ, before_model)
+        return
+    ux.print_lines(ux.result_box(dest, error, before_model))
+    sys.stdout.flush()
+
+
+class _entered:
+    """A context manager that was already entered (main enters the case first, so a case that cannot be prepared
+    is a plain error, not a traceback): exit calls its __exit__."""
+
+    def __init__(self, cm, value):
+        self.cm, self.value = cm, value
+
+    def __enter__(self):
+        return self.value
+
+    def __exit__(self, *exc):
+        return self.cm.__exit__(*exc)
 
 
 def summary_of(e: BaseException) -> dict | None:

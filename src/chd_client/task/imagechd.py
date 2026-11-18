@@ -266,8 +266,12 @@ def main(argv=None):
     if a.json:
         print(json.dumps({"dir": str(root), "cases": cases}))
     else:
+        from chd_client.chd_classes import code
+        from chd_client.task.diagnosis_schema import CLASS_FOR_FLAG
+        print(f"{'case':<6}{'diagnosis (class codes: ./run.sh --list classes)':<52}spacing (mm)")
         for c in cases:
-            print(f"{c['id']}  {' '.join(c['flags']) or '-':24s} spacing {c['spacing_mm']}")
+            dx = " ".join(code(CLASS_FOR_FLAG.get(f, f)) for f in c["flags"]) or "no flag (normal, or not labelled)"
+            print(f"{c['id']:<6}{dx:<52}{c['spacing_mm']}")
         print(f"{len(cases)} cases in {root}")
 
 

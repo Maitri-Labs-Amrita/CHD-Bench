@@ -17,7 +17,10 @@ def dx(*present):
 
 def test_classes_are_the_envs():
     assert diagnosis.CLASS_NAMES == CHD_CLASSES
-    assert diagnosis.SHORT == IMAGECHD_FLAG
+    assert set(IMAGECHD_FLAG) == set(CHD_CLASSES)
+    # display codes come from the class manifest, not the dataset's sheet: ImageCHD's "PA" (pulmonary atresia) is
+    # also the pulmonary artery segment, so the display code is PuA
+    assert diagnosis.SHORT["pulmonary_atresia"] == "PuA" and IMAGECHD_FLAG["pulmonary_atresia"] == "PA"
 
 
 def test_dry_run_submits_a_valid_classification():

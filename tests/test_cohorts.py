@@ -166,7 +166,7 @@ def test_parse_truth():
     assert cohorts.parse_truth("normal", classes) == []
     assert cohorts.parse_truth("tetralogy_of_fallot, ventricular_septal_defect", classes) == \
         ["ventricular_septal_defect", "tetralogy_of_fallot"]
-    for bad in ("VSD", "normal,ventricular_septal_defect", ""):
+    for bad in ("PA", "normal,ventricular_septal_defect", ""):
         with pytest.raises(cohorts.CohortError, match="--truth"):
             cohorts.parse_truth(bad, classes)
 

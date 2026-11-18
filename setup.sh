@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Set up CHD-Bench on this machine, right after `git clone` (Linux or macOS, no sudo). Needs uv and git on PATH.
 #
-#   ./setup.sh [--imagechd-dir DIR] [--slicer PATH] [--xvfb PATH] [--lib-dir DIR]... [--shared DIR]
-#              [--check-case ID] [--skip-check]
+#   ./setup.sh [--imagechd-dir DIR] [--hvsmr-dir DIR] [--slicer PATH] [--xvfb PATH] [--lib-dir DIR]...
+#              [--shared DIR] [--check-case ID] [--skip-check]
 #
 # 1. Prerequisites: uv (https://docs.astral.sh/uv/) and git (uv fetches slicer-mcp from its git repository).
 # 2. uv sync --frozen --inexact: the locked versions, including slicer-mcp at the commit pyproject.toml pins
@@ -13,6 +13,8 @@
 #    a team installs once). On macOS: /Applications/Slicer.app.
 # 4. ImageCHD: --imagechd-dir DIR, else $CHD_IMAGECHD_DIR, else the config's imagechd_dir, else data/ImageCHD_dataset.
 #    It cannot be downloaded automatically (Kaggle login).
+#    HVSMR-2.0 (optional, MRI): --hvsmr-dir DIR (the folder with orig/ and hvsmr_clinical.csv) is checked and saved
+#    in config/paths.local.json. Neither dataset is needed to run your own scans (./run.sh --volume ...).
 # 5. config/runtime.local.json (gitignored): only the keys setup owns are set; every other setting there is kept.
 # 6. The check: ./run.sh --imagechd <case> --labels gt --dry-run-scripted. Slicer starts, prepares an ImageCHD case,
 #    runs one scripted episode (no model, no cost) and stops (Linux: on a virtual display). --check-case ID picks the
@@ -30,7 +32,7 @@ CHD_RT="$CHD/config/runtime.local.json"
 HEADLESS_RT="$CHD/data/dev/headless_runtime.json"
 CHECK_LOG="$CHD/data/dev/setup_check.log"
 
-SLICER=""; XVFB=""; LIB_DIRS=(); SHARED=""; IMAGECHD_DIR=""; CHECK_CASE=""; SKIP_CHECK=0
+SLICER=""; XVFB=""; LIB_DIRS=(); SHARED=""; IMAGECHD_DIR=""; HVSMR_DIR=""; CHECK_CASE=""; SKIP_CHECK=0
 need() {
   local opt="$1" what="$2"; shift 2
   if [ $# -lt 2 ] || [ -z "$2" ] || [ "${2#--}" != "$2" ]; then
@@ -45,6 +47,7 @@ while [ $# -gt 0 ]; do
     --lib-dir) need "$1" "a folder of extra system libraries" "$@"; LIB_DIRS+=("$2"); shift 2 ;;
     --shared) need "$1" "the group folder to install Xvfb and Slicer into" "$@"; SHARED="$2"; shift 2 ;;
     --imagechd-dir) need "$1" "the ImageCHD dataset folder" "$@"; IMAGECHD_DIR="$2"; shift 2 ;;
+    --hvsmr-dir) need "$1" "the HVSMR-2.0 dataset folder (with orig/ and hvsmr_clinical.csv)" "$@"; HVSMR_DIR="$2"; shift 2 ;;
     --check-case) need "$1" "an ImageCHD case id (e.g. 1001)" "$@"; CHECK_CASE="$2"; shift 2 ;;
     --skip-check) SKIP_CHECK=1; shift ;;
     -h|--help) sed -n '2,/^set -euo pipefail$/{/^set -euo pipefail$/!p;}' "$0"; exit 0 ;;
@@ -128,7 +131,7 @@ if [ "$OS" = linux ]; then
 fi
 echo "  ok: $SLICER"
 
-say "4/6 ImageCHD data"
+say "4/6 data: ImageCHD (CT) and HVSMR-2.0 (MRI)"
 DATA_GIVEN="${IMAGECHD_DIR:-${CHD_IMAGECHD_DIR:-}}"
 if [ -z "$DATA_GIVEN" ] && [ -f "$CHD_RT" ]; then
   DATA_GIVEN="$(helper get --path "$CHD_RT" --key imagechd_dir)"
@@ -157,6 +160,24 @@ else
   imageCHD_dataset_diagnosis_info(updated20210510).xlsx in $CHD/data/ImageCHD_dataset/,
   or pass --imagechd-dir DIR, then run ./setup.sh again. Without the data the episode check is skipped.
 EOF
+fi
+
+echo "  HVSMR-2.0 (optional, MRI):"
+HV_OK=0; HV_NOTE="not set"
+if [ -n "$HVSMR_DIR" ]; then
+  if OUT="$(helper hvsmr --dir "$HVSMR_DIR" --path "$CHD/config/paths.local.json" 2>&1)"; then
+    IFS=$'\t' read -r HV_ROOT HV_N HV_WRITE <<<"$OUT"
+    HV_OK=1; HV_NOTE="$HV_ROOT ($HV_N cases)"
+    echo "  ok: $HV_NOTE; saved in config/paths.local.json ($HV_WRITE)"
+  else
+    die "HVSMR-2.0 data: $OUT"
+  fi
+elif OUT="$(helper hvsmr-current 2>/dev/null)"; then
+  IFS=$'\t' read -r HV_ROOT HV_N <<<"$OUT"
+  HV_OK=1; HV_NOTE="$HV_ROOT ($HV_N cases)"
+  echo "  ok: $HV_NOTE (from config/paths.local.json)"
+else
+  echo "  not set (optional; for MRI cases: ./setup.sh --hvsmr-dir DIR)"
 fi
 
 say "5/6 config/runtime.local.json"
@@ -214,46 +235,59 @@ else
   fi
 fi
 
+KEYS="$(helper keys 2>/dev/null || true)"
+case "$CHECK" in PASSED*) CHK_LINE="PASSED: Slicer starts, a case loads, a run folder is written" ;; *) CHK_LINE="$CHECK" ;; esac
+RULE="================================================================"
 cat <<EOF
 
-== Summary
-  slicer-mcp:      $MCP_NOTE
-  Slicer:          $SLICER_NOTE ($VERSION_NOTE)
-  ImageCHD:        $([ "$DATA_OK" = 1 ] && echo "$DATA_DIR ($N_CASES cases)" || echo "NOT FOUND ($DATA_DIR)")
-  config:          $CHD_RT ($CHD_CFG)
-  check:           $CHECK
+$RULE
+                          SETUP RESULT
+$RULE
+ Python + slicer-mcp   ok       slicer-mcp $MCP_NOTE
+ 3D Slicer             ok       $SLICER ($VERSION_NOTE)
 EOF
-if [ "$RC" = 1 ]; then
-  cat <<EOF
+if [ "$DATA_OK" = 1 ]; then
+  echo " ImageCHD (CT)         ok       $DATA_DIR ($N_CASES cases)"
+else
+  echo " ImageCHD (CT)         not set  optional: ./setup.sh --imagechd-dir DIR"
+fi
+if [ "$HV_OK" = 1 ]; then
+  echo " HVSMR-2.0 (MRI)       ok       $HV_NOTE"
+else
+  echo " HVSMR-2.0 (MRI)       not set  optional: ./setup.sh --hvsmr-dir DIR"
+fi
+if [ -n "$KEYS" ]; then
+  echo " Model keys            ok       found: $KEYS (values not shown)"
+else
+  echo " Model keys            none     free test runs only; a paid model needs a key in $CHD/.env"
+fi
+echo " Test run (free)       $CHK_LINE"
+echo "$RULE"
 
-The check failed. The last lines of $CHECK_LOG:
-EOF
+if [ "$RC" = 1 ]; then
+  echo
+  echo "The test run failed. The last lines of $CHECK_LOG:"
   tail -15 "$CHECK_LOG" | sed 's/^/  | /'
-  cat <<EOF
-Common causes: a Slicer that crashes on exit after case preparation ("exit abnormally"): try another Slicer $SLICER_VERSION
-install (--slicer PATH, or run without --slicer for a fresh one); a fixed bridge_port in $CHD_RT that another Slicer
-already uses; missing system libraries (Linux: --lib-dir DIR, or run without --slicer).
-EOF
+  echo "Common causes: a Slicer that crashes on exit after case preparation (\"exit abnormally\"): try another"
+  echo "Slicer $SLICER_VERSION install (--slicer PATH, or run without --slicer for a fresh one); a fixed bridge_port"
+  echo "in $CHD_RT that another Slicer already uses; missing system libraries (Linux: --lib-dir DIR, or run"
+  echo "without --slicer)."
   exit 1
 fi
+
+echo
+echo "Next, from $CHD (every option: ./run.sh --help; every situation: README.md):"
 if [ "$DATA_OK" = 1 ]; then
-  cat <<EOF
-
-Next, from $CHD (./run.sh starts Slicer, runs one episode and stops Slicer$([ "$OS" = linux ] && echo "; on a virtual display")):
-  cd $CHD
-  ./run.sh --imagechd $CASE --labels gt --dry-run-scripted
-A real model calls a paid API. Set its key first: export it, or put KEY=value lines in $CHD/.env (./run.sh reads it).
-  export ANTHROPIC_API_KEY=...
-  ./run.sh --imagechd $CASE --labels gt --model claude-opus-5-5
-  export OPENROUTER_API_KEY=...
-  ./run.sh --imagechd $CASE --labels gt --model 'openrouter:openai/gpt-6-astra'
-Other cases: uv run python -m chd_client.task.imagechd list. On a SLURM cluster, run episodes on a compute node
-(docs/SETUP.md).
-EOF
-else
-  cat <<EOF
-
-Next: put the ImageCHD data in place (see above) and run ./setup.sh again; it then runs the check.
-EOF
+  echo "  ./run.sh --list imagechd                                   the cases and their diagnoses"
+  echo "  ./run.sh --imagechd $CASE --labels gt --dry-run-scripted        a free test run (no model)"
+  echo "  ./run.sh --imagechd $CASE --labels gt --model claude-opus-5-5   a real model (paid; asks before it starts)"
+fi
+echo "  ./run.sh --volume /path/to/scan_or_dicom_folder --model M  your own scan (no dataset needed)"
+echo "  ./run.sh --list classes                                    the class codes for --truth"
+if [ -z "$KEYS" ]; then
+  echo "  A real model needs a key: put one line in $CHD/.env, for example OPENROUTER_API_KEY=sk-or-..."
+fi
+if [ "$DATA_OK" != 1 ] && [ "$SKIP_CHECK" != 1 ]; then
+  echo "  The free test run needs the ImageCHD data (step 4 above). Without it, setup is installed but NOT verified."
 fi
 exit "$RC"

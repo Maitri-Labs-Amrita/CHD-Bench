@@ -24,7 +24,7 @@ def prelaunch(*argv):
 def test_volume_parses_with_its_options():
     a = parse("--volume", "/s/scan.nii.gz", "--modality", "mr", "--truth", "normal", "--labels", "/s/mask.nii.gz",
               "--label-map", "1=LV,2=RV")
-    assert (a.volume, a.modality, a.truth, a.labels, a.label_map) == ("/s/scan.nii.gz", "mr", "normal",
+    assert (a.volume, a.modality, a.truth, a.labels, a.label_map) == ("/s/scan.nii.gz", "mr", ["normal"],
                                                                       "/s/mask.nii.gz", "1=LV,2=RV")
     assert parse("--volume", "/s/scan.nii.gz", "--labels", "/m.nii.gz").modality == "ct"
     with pytest.raises(SystemExit):
@@ -50,8 +50,10 @@ def test_truth_is_parsed_against_the_modalitys_classes():
 
 
 @pytest.mark.parametrize("argv, msg", [
-    (["--volume", "/s.nii.gz", "--truth", "VSD", "--labels", "/m.nii.gz"], r"--truth 'VSD': unknown classes \['VSD'\]"),
-    (["--volume", "/s.nii.gz", "--truth", "tortuous_vessels", "--labels", "/m.nii.gz"], "unknown classes"),
+    (["--volume", "/s.nii.gz", "--truth", "PA", "--labels", "/m.nii.gz"],
+     r"--truth: PA is a segmentation structure \(pulmonary artery\), not a diagnosis"),
+    (["--volume", "/s.nii.gz", "--truth", "tortuous_vessels", "--labels", "/m.nii.gz"],
+     r"not in the class list for a CT scan \(MRI only\)"),
     (["--volume", "/s.nii.gz", "--labels", "gt"], "--volume has no ground-truth segmentation"),
     (["--imagechd", "1008", "--modality", "mr", "--labels", "gt"], "--modality and --truth go with --volume"),
     (["--hvsmr", "24", "--truth", "normal", "--labels", "gt"], "--modality and --truth go with --volume"),
@@ -93,7 +95,7 @@ def fake_main(monkeypatch, tmp_path):
     monkeypatch.setattr(dicom_run, "temporary_cohort_case", fake_case)
     monkeypatch.setattr(re_mod, "server_params", lambda **k: seen.setdefault("params", k))
     monkeypatch.setattr(re_mod, "traces_dir_for", lambda runtime=None: tmp_path)
-    monkeypatch.setattr(re_mod, "finish_run", lambda *a, **k: seen.setdefault("finish", (a, k)))
+    monkeypatch.setattr(re_mod, "finish_run", lambda *a, **k: seen.update(finish=(a, k)))
     monkeypatch.setattr(re_mod, "run_episode", fake_episode)
     monkeypatch.setattr(re_mod.anyio, "run", lambda fn: fn())
     return seen

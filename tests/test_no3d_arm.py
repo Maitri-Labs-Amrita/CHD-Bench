@@ -286,7 +286,8 @@ def test_cli_cohorts_pick_the_arms_profile_and_prompt(monkeypatch, tmp_path, c, 
 
 
 @pytest.mark.parametrize("argv, msg", [
-    (["--imagechd", "1008", "--arm", "2d_seg"], "the following arguments are required: --labels"),
+    (["--imagechd", "1008", "--arm", "2d_seg"], "slices only \\(--no-3d\\) also shows the model a segmentation"),
+    (["--imagechd", "1008", "--no-3d"], "slices only \\(--no-3d\\) also shows the model a segmentation: add --labels"),
     (["--imagechd", "1008", "--arm", "2d_seg", "--labels", "gt", "--prompt", LITE_V3], r"for the 3d_seg arm, not 2d_seg"),
     (["--imagechd", "1008", "--labels", "gt", "--prompt", NO3D], r"for the 2d_seg arm, not 3d_seg"),
     (["--hvsmr", "1", "--arm", "2d_seg", "--labels", "/x.nii.gz", "--prompt", NO3D],

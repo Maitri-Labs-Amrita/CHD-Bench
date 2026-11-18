@@ -1,0 +1,34 @@
+code,full_name,class,ct,mri,also_accepted
+ASD,Atrial septal defect,atrial_septal_defect,yes,yes,
+VSD,Ventricular septal defect,ventricular_septal_defect,yes,yes,
+AVSD,Atrioventricular septal defect,atrioventricular_septal_defect,yes,,
+ToF,Tetralogy of Fallot,tetralogy_of_fallot,yes,,
+TGA,Transposition of the great arteries,transposition_of_great_arteries,yes,,
+DORV,Double outlet right ventricle,double_outlet_right_ventricle,yes,yes,
+CAT,Common arterial trunk (truncus arteriosus),common_arterial_trunk,yes,,
+CoA,Coarctation of the aorta,coarctation,yes,,CA
+AAH,Aortic arch hypoplasia,aortic_arch_hypoplasia,yes,,
+DAA,Double aortic arch,double_aortic_arch,yes,,
+IAA,Interrupted aortic arch,interrupted_aortic_arch,yes,,
+PuA,Pulmonary atresia,pulmonary_atresia,yes,,PAtr
+APVC,Anomalous pulmonary venous connection,anomalous_pulmonary_venous_connection,yes,,
+DSVC,Double superior vena cava,double_svc,yes,,
+PDA,Patent ductus arteriosus,patent_ductus_arteriosus,yes,,
+PAS,Pulmonary artery sling,pulmonary_artery_sling,yes,,
+DTGA,D-loop transposition of the great arteries,d_loop_transposition_of_great_arteries,,yes,D-TGA DLoopTGA
+LTGA,L-loop transposition of the great arteries,l_loop_transposition_of_great_arteries,,yes,L-TGA LLoopTGA
+BSVC,Bilateral superior vena cava,bilateral_svc,,yes,BilateralSVC
+Dextro,Dextrocardia,dextrocardia,,yes,Dextrocardia
+Meso,Mesocardia,mesocardia,,yes,Mesocardia
+InvV,Inverted ventricles,inverted_ventricles,,yes,InvertedVentricles
+InvA,Inverted atria,inverted_atria,,yes,InvertedAtria
+LCIVC,Left or central inferior vena cava,left_or_central_ivc,,yes,LeftCentralIVC
+LCSVC,Left or central superior vena cava,left_or_central_svc,,yes,LeftCentralSVC
+SV,Single ventricle,single_ventricle,,yes,SingleVentricle
+DILV,Double inlet left ventricle,double_inlet_left_ventricle,,yes,
+DIDORV,Double inlet double outlet right ventricle,double_inlet_double_outlet_right_ventricle,,yes,
+ComA,Common atrium,common_atrium,,yes,CommonAtrium
+HTX,Heterotaxy,heterotaxy,,yes,Heterotaxy
+SIV,Superoinferior ventricles,superoinferior_ventricles,,yes,SuperoinferiorVentricles
+PuAMS,Pulmonary atresia or main pulmonary artery stump,pulmonary_atresia_or_mpa_stump,,yes,PAAtresiaOrMPAStump
+TortV,Tortuous vessels,tortuous_vessels,,yes,TortuousVessels

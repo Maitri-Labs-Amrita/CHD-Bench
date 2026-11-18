@@ -154,9 +154,9 @@ def cohort_metrics(run_dir, cohort) -> dict:
     try:
         if c is None or c.key != cohort.key:
             raise ValueError(f"summary case_source is not a {cohort.name} case")
-        if not c.has_truth:
-            return {"diagnosis": {**base, "skipped": "no truth given (--truth)"}}
         rp = d / "trace" / "report.json"
+        if not c.has_truth:
+            return {"diagnosis": {**base, "skipped": "no truth given (--truth)", **unscored_call(d)}}
         if not rp.is_file():
             return {"diagnosis": {**base, "skipped": "no report submitted"}}
         source = "--truth" if c.key == "custom" else f"{c.name} clinical table"
@@ -171,6 +171,29 @@ def cohort_metrics(run_dir, cohort) -> dict:
         return {"diagnosis": out}
     except Exception as e:  # noqa: BLE001
         return {"diagnosis": {**base, "error": f"{type(e).__name__}: {e}"}}
+
+
+def unscored_call(run_dir) -> dict:
+    """The model's call for a run with no truth to score it against: {"predicted": [classes called present],
+    "confidence": {class: confidence}, "normal_call": {present, confidence} when normal.json exists}; {} when no
+    report was submitted."""
+    from chd_client.diagnosis import class_names, present
+    d = Path(run_dir) / "trace"
+    rp = d / "report.json"
+    if not rp.is_file():
+        return {}
+    rep = json.loads(rp.read_text())
+    pred = present(rep)
+    out = {"predicted": pred, "n_classes": len(class_names(rep)),
+           "confidence": {k: (rep["classes"][k] or {}).get("confidence") for k in pred}}
+    np_ = d / "normal.json"
+    if np_.is_file():
+        call = json.loads(np_.read_text())["normal"]
+        out["normal_call"] = {"present": call["present"], "confidence": call["confidence"]}
+    elif isinstance((rep.get("classes") or {}).get("normal"), dict):
+        n = rep["classes"]["normal"]
+        out["normal_call"] = {"present": n.get("present"), "confidence": n.get("confidence")}
+    return out
 
 
 def tool_use(run_dir) -> dict:

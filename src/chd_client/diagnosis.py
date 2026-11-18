@@ -3,27 +3,19 @@ display: the class names in the scorer's order with short labels, and helpers th
 tests/test_diagnosis.py checks it against the scorer's schema (chd_client.task.diagnosis_schema).
 """
 
-CLASSES = (
-    ("atrial_septal_defect", "ASD", "Atrial septal defect"),
-    ("ventricular_septal_defect", "VSD", "Ventricular septal defect"),
-    ("atrioventricular_septal_defect", "AVSD", "Atrioventricular septal defect"),
-    ("tetralogy_of_fallot", "ToF", "Tetralogy of Fallot"),
-    ("transposition_of_great_arteries", "TGA", "Transposition of the great arteries"),
-    ("double_outlet_right_ventricle", "DORV", "Double outlet right ventricle"),
-    ("common_arterial_trunk", "CAT", "Common arterial trunk"),
-    ("coarctation", "CA", "Coarctation"),
-    ("aortic_arch_hypoplasia", "AAH", "Aortic arch hypoplasia"),
-    ("double_aortic_arch", "DAA", "Double aortic arch"),
-    ("interrupted_aortic_arch", "IAA", "Interrupted aortic arch"),
-    ("pulmonary_atresia", "PA", "Pulmonary atresia"),
-    ("anomalous_pulmonary_venous_connection", "APVC", "Anomalous pulmonary venous connection"),
-    ("double_svc", "DSVC", "Double SVC"),
-    ("patent_ductus_arteriosus", "PDA", "Patent ductus arteriosus"),
-    ("pulmonary_artery_sling", "PAS", "Pulmonary artery sling"),
-)
-CLASS_NAMES = tuple(c for c, _, _ in CLASSES)
-SHORT = {c: s for c, s, _ in CLASSES}
-LONG = {c: name for c, _, name in CLASSES}
+from chd_client.chd_classes import load as _manifest
+
+CLASS_NAMES = ("atrial_septal_defect", "ventricular_septal_defect", "atrioventricular_septal_defect",
+               "tetralogy_of_fallot", "transposition_of_great_arteries", "double_outlet_right_ventricle",
+               "common_arterial_trunk", "coarctation", "aortic_arch_hypoplasia", "double_aortic_arch",
+               "interrupted_aortic_arch", "pulmonary_atresia", "anomalous_pulmonary_venous_connection", "double_svc",
+               "patent_ductus_arteriosus", "pulmonary_artery_sling")
+# Codes and full names for display come from the class manifest (config/chd_classes.csv, chd_client.chd_classes),
+# for the CT and the MRI classes; never the dataset's own column names (ImageCHD's sheet says PA for pulmonary
+# atresia, which is also the pulmonary artery segment).
+SHORT = {c.name: c.code for c in _manifest()}
+LONG = {c.name: c.full_name for c in _manifest()}
+CLASSES = tuple((c, SHORT[c], LONG[c]) for c in CLASS_NAMES)
 
 
 def is_diagnosis_report(report) -> bool:

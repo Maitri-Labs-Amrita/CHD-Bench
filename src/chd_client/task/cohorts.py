@@ -201,15 +201,14 @@ def custom(modality: str, truth=None) -> Cohort:
                   label_map=IMAGECHD_LABEL_MAP, truth=_truth, has_truth=fixed is not None)
 
 
-def parse_truth(text: str, classes) -> list:
-    """--truth: comma-separated class names, or 'normal'. Unknown names are an error."""
-    names = [t.strip() for t in text.split(",") if t.strip()]
-    if names == [NORMAL]:
-        return []
-    bad = [t for t in names if t not in classes]
-    if bad or not names:
-        raise CohortError(f"--truth {text!r}: unknown classes {bad}; use 'normal' or names from: {', '.join(classes)}")
-    return [c for c in classes if c in names]
+def parse_truth(text, classes, scan="this scan") -> list:
+    """--truth: class codes from config/chd_classes.csv (or their other accepted spellings, or class names), separated
+    by commas or spaces, any case; or 'normal'. Anything else is a CohortError that says how to fix it."""
+    from chd_client.chd_classes import ClassNameError, resolve
+    try:
+        return resolve(text, classes, scan)
+    except ClassNameError as e:
+        raise CohortError(str(e)) from None
 
 
 def for_case_source(src: dict | None):
