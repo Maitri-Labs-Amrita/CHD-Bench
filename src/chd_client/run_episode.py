@@ -843,7 +843,9 @@ def parser(prog="run-episode") -> argparse.ArgumentParser:
     case.add_argument("--hvsmr", type=int, metavar="N",
                       help="an HVSMR-2.0 case (pat<N>): its MRI, profile chd_mr_v1 and prompt chd_mr_v1")
     case.add_argument("--volume", metavar="FILE",
-                      help="any 3D scan as a NIfTI file (.nii or .nii.gz); see --modality, --truth and --label-map")
+                      help="any 3D scan: a NIfTI file (.nii, .nii.gz; used as it is), or a DICOM folder, a DICOM file or "
+                           "another image file (NRRD, MHA, ...), converted to NIfTI first; see --modality, --truth "
+                           "and --label-map")
     ap.add_argument("--modality", choices=("ct", "mr"), default="ct",
                     help="with --volume: ct (values in HU; profile and prompt chd_ct_v1) or mr (rescaled so the "
                          "99.5th percentile is 1000; profile and prompt chd_mr_v1). Default: ct")

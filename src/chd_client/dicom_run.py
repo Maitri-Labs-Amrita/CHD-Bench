@@ -251,21 +251,113 @@ def case_key(base, labels, gt_file=None) -> str:
     return f"{base}:{_file_sha256(Path(f).expanduser())[:12]}"
 
 
-def cohort_prepare_args(cohort, n, labels, workdir, label_map=None, profile=None) -> tuple[list, dict]:
-    """`slicer-mcp case prepare --volume` arguments for case n of a cohort (an HVSMR id, or the --volume file of a
-    custom scan). The volume keeps its own header geometry; an MR volume is rescaled into workdir first."""
+NIFTI_SUFFIXES = (".nii", ".nii.gz")
+
+
+def is_nifti(path) -> bool:
+    return Path(path).name.lower().endswith(NIFTI_SUFFIXES)
+
+
+def scan_name(path) -> str:
+    """The scan's name: the file name without its image suffix, or the folder name."""
+    name = Path(path).name
+    for suf in (".nii.gz", ".nii", ".nrrd", ".nhdr", ".mha", ".mhd", ".dcm"):
+        if name.lower().endswith(suf):
+            return name[:-len(suf)]
+    return name
+
+
+def _dicom_series_files(folder, want_file=None):
+    """(uid, files, n_series) of the DICOM series in folder: the series that holds want_file, else the one with the
+    most files. ([], 0) when the folder holds no DICOM series."""
+    import SimpleITK as sitk
+    reader = sitk.ImageSeriesReader()
+    series = reader.GetGDCMSeriesIDs(str(folder)) or ()
+    files = {uid: reader.GetGDCMSeriesFileNames(str(folder), uid) for uid in series}
+    if want_file is not None:
+        want = str(Path(want_file).resolve())
+        uid = next((u for u, fs in files.items() if want in (str(Path(f).resolve()) for f in fs)), None)
+        if uid is not None:
+            return uid, files[uid], len(series)
+    if not files:
+        return None, [], 0
+    uid = max(files, key=lambda u: len(files[u]))
+    return uid, files[uid], len(series)
+
+
+def to_nifti(src, out, echo=print) -> dict:
+    """Convert a scan that is not NIfTI to the NIfTI file out with SimpleITK, and return what was converted.
+    src is a DICOM folder (the series with the most files), one DICOM file (its whole series, from its folder) or
+    any other image file SimpleITK reads (NRRD, MHA/MHD, ...). DICOM rescale slope and intercept are applied, so a
+    CT comes out in HU. The NIfTI holds the voxels and the geometry only: no patient fields."""
+    import SimpleITK as sitk
+    src = Path(src)
+    info = {}
+    if src.is_dir():
+        uid, files, n_series = _dicom_series_files(src)
+        if not files:
+            raise DicomRunError(f"--volume {src}: a folder with no DICOM series in it (give a NIfTI file, another "
+                                "image file or a DICOM folder)")
+    else:
+        try:
+            kind = sitk.ImageFileReader.GetImageIOFromFileName(str(src))
+        except RuntimeError:
+            kind = ""
+        if not kind:
+            raise DicomRunError(f"--volume {src}: not an image file SimpleITK can read (give a NIfTI file, "
+                                "another image file or a DICOM folder)") from None
+        uid, files, n_series = (_dicom_series_files(src.parent, src) if kind == "GDCMImageIO"
+                                else (None, None, 0))
+    if files:
+        more = f"; {n_series} series in the folder, using the one with {'this file' if src.is_file() else 'the most files'}" \
+            if n_series > 1 else ""
+        if echo:
+            echo(f"converting DICOM to NIfTI: {src} ({len(files)} files{more}) ...")
+        reader = sitk.ImageSeriesReader()
+        reader.SetFileNames(files)
+        info.update(source_format="dicom", dicom_series=uid, dicom_n_series=n_series, dicom_n_files=len(files))
+    else:
+        if echo:
+            echo(f"converting {kind.removesuffix('ImageIO').upper()} to NIfTI: {src} ...")
+        reader = sitk.ImageFileReader()
+        reader.SetFileName(str(src))
+        info.update(source_format=kind)
+    try:
+        image = reader.Execute()
+    except RuntimeError as e:
+        raise DicomRunError(f"--volume {src}: cannot be read: {str(e).strip().splitlines()[-1]}") from None
+    if image.GetDimension() != 3 or min(image.GetSize()) < 2:
+        raise DicomRunError(f"--volume {src}: not a 3D volume (size {'x'.join(map(str, image.GetSize()))})")
+    if image.GetNumberOfComponentsPerPixel() != 1:
+        raise DicomRunError(f"--volume {src}: not a grey-value volume ({image.GetNumberOfComponentsPerPixel()} "
+                            "components per voxel)")
+    sitk.WriteImage(image, str(out))
+    if echo:
+        echo(f"converted: {'x'.join(map(str, image.GetSize()))} voxels, spacing "
+             f"{' x '.join(f'{v:.3g}' for v in image.GetSpacing())} mm -> {out.name}")
+    return info
+
+
+def cohort_prepare_args(cohort, n, labels, workdir, label_map=None, profile=None, echo=print) -> tuple[list, dict]:
+    """`slicer-mcp case prepare --volume` arguments for case n of a cohort (an HVSMR id, or the --volume of a custom
+    scan). A custom scan that is not NIfTI (a DICOM folder or file, NRRD, MHA, ...) is converted to NIfTI in workdir
+    first (to_nifti); a NIfTI file is used as it is. The volume keeps its own header geometry; an MR volume is
+    rescaled into workdir first."""
     custom = cohort.key == "custom"
     raw = Path(n).expanduser().resolve() if custom else cohort.raw(n)
-    if not raw.is_file():
+    if not (raw.is_file() or (custom and raw.is_dir())):
         raise DicomRunError(f"{cohort.name} case {n}: volume not found: {raw}")
-    if custom and not (raw.name.endswith(".nii") or raw.name.endswith(".nii.gz")):
-        raise DicomRunError(f"--volume must be a .nii or .nii.gz file: {raw}")
-    extra = {"dataset": cohort.key, "source_volume": str(raw), "source_dir": str(raw.parent), "has_labels": False}
+    extra = {"dataset": cohort.key, "source_volume": str(raw), "source_dir": str(raw if raw.is_dir() else raw.parent),
+             "has_labels": False}
     if custom:
-        extra.update(name=raw.name.removesuffix(".gz").removesuffix(".nii"), modality=cohort.modality,
+        extra.update(name=scan_name(raw), modality=cohort.modality,
                      truth=None if not cohort.has_truth else cohort.truth(None))
     else:
         extra[cohort.id_key] = int(n)
+    if custom and not is_nifti(raw):
+        converted = Path(workdir) / "volume_converted.nii.gz"
+        extra.update(to_nifti(raw, converted, echo))
+        raw = converted
     vol = raw
     if cohort.modality == "mr":
         from chd_client.task.cohorts import normalize_mr
@@ -295,7 +387,7 @@ def temporary_cohort_case(cohort, n, labels, runtime=None, run=subprocess.run, e
         echo(f"preparing {cohort.name} case {n} ...")
     work = Path(tempfile.mkdtemp(prefix=".chd_volume_", dir=Path(runtime).resolve().parent if runtime else None))
     try:
-        prep, extra = cohort_prepare_args(cohort, n, labels, work, label_map, profile)
+        prep, extra = cohort_prepare_args(cohort, n, labels, work, label_map, profile, echo=echo)
         with _temporary(prep, extra, runtime, run, echo, factory=CohortCase) as tc:
             if labels:
                 lab = Path(extra["labels_file"])

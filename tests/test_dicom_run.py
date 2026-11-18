@@ -401,7 +401,7 @@ def test_a_custom_mr_volume_is_rescaled_into_the_work_folder(tmp_path):
     assert args[args.index("--case-key") + 1] == "custom:heart:nolabels"
 
 
-@pytest.mark.parametrize("name, msg", [("missing.nii.gz", "volume not found"), ("scan.nrrd", "must be a .nii")])
+@pytest.mark.parametrize("name, msg", [("missing.nii.gz", "volume not found"), ("scan.nrrd", "not an image file")])
 def test_a_bad_custom_volume_is_refused(tmp_path, name, msg):
     from chd_client.task import cohorts
     if not name.startswith("missing"):
@@ -435,3 +435,84 @@ def hashlib_hex(path) -> str:
 def test_a_case_records_the_slicer_mcp_source(tmp_path, monkeypatch):
     with dicom_run.temporary_imagechd_case(1008, run=FakeRun(), echo=None) as tc:
         assert tc.info["slicer_mcp"] == {"version": "0.1.0", "commit": "c1", "dirty": False}
+
+
+import numpy as np  # noqa: E402 (the DICOM conversion tests)
+
+
+def write_dicom_series(folder, values, spacing=(0.5, 0.6, 1.25), origin=(-10.0, 20.0, 30.0), uid="1.2.826.0.1.3680043.2.1125.1"):
+    """A DICOM CT series of values (z, y, x; HU, stored as signed 16 bit), one file per slice."""
+    import SimpleITK as sitk
+    folder.mkdir(parents=True, exist_ok=True)
+    w = sitk.ImageFileWriter()
+    w.KeepOriginalImageUIDOn()
+    for z in range(values.shape[0]):
+        sl = sitk.GetImageFromArray(values[z:z + 1].astype(np.int16))
+        sl.SetSpacing(spacing)
+        sl.SetOrigin((origin[0], origin[1], origin[2] + z * spacing[2]))
+        for tag, v in (("0008|0060", "CT"), ("0020|000e", uid), ("0020|000d", uid + ".9"), ("0020|0013", str(z + 1)),
+                       ("0020|0032", "\\".join(map(str, (origin[0], origin[1], origin[2] + z * spacing[2])))),
+                       ("0020|0037", "1\\0\\0\\0\\1\\0"),
+                       ("0008|0018", f"{uid}.{z + 1}"), ("0010|0010", "Doe^Jane")):
+            sl.SetMetaData(tag, v)
+        w.SetFileName(str(folder / (f"slice{z:03d}.dcm" if uid.endswith(".1125.1") else f"s{uid[-1]}_{z:03d}.dcm")))
+        w.Execute(sl)
+    return folder
+
+
+def hu_volume():
+    return (np.arange(5 * 6 * 7, dtype=np.int16).reshape(5, 6, 7) * 7 - 1000)
+
+
+@pytest.mark.parametrize("pick", ["folder", "file"])
+def test_a_dicom_scan_is_converted_to_nifti_in_hu(tmp_path, pick):
+    import SimpleITK as sitk
+    from chd_client.task import cohorts
+    src = write_dicom_series(tmp_path / "patient_ct", hu_volume())
+    given = src if pick == "folder" else src / "slice002.dcm"
+    work = tmp_path / "work"
+    work.mkdir()
+    said = []
+    args, extra = dicom_run.cohort_prepare_args(cohorts.custom("ct"), str(given), None, work, echo=said.append)
+    out = args[args.index("--volume") + 1]
+    assert out == work / "volume_converted.nii.gz" and out.is_file()
+    img = sitk.ReadImage(str(out))
+    assert np.array_equal(sitk.GetArrayFromImage(img), hu_volume())
+    assert np.allclose(img.GetSpacing(), (0.5, 0.6, 1.25)) and np.allclose(img.GetOrigin(), (-10.0, 20.0, 30.0))
+    assert extra["source_format"] == "dicom" and extra["dicom_n_files"] == 5 and extra["volume"] == str(out)
+    assert extra["name"] == ("patient_ct" if pick == "folder" else "slice002")
+    assert said[0].startswith("converting DICOM to NIfTI: ") and said[-1].startswith("converted: 7x6x5 voxels")
+    assert "Doe" not in out.read_bytes().decode("latin-1")
+
+
+def test_a_dicom_folder_with_two_series_uses_the_larger_one(tmp_path):
+    from chd_client.task import cohorts
+    src = write_dicom_series(tmp_path / "study", hu_volume(), uid="1.2.3.4.1")
+    write_dicom_series(src, hu_volume()[:2], uid="1.2.3.4.2")
+    args, extra = dicom_run.cohort_prepare_args(cohorts.custom("ct"), str(src), None, tmp_path, echo=None)
+    assert extra["dicom_series"] == "1.2.3.4.1" and extra["dicom_n_series"] == 2 and extra["dicom_n_files"] == 5
+
+
+def test_an_nrrd_scan_is_converted_and_a_nifti_scan_is_not(tmp_path):
+    import SimpleITK as sitk
+    from chd_client.task import cohorts
+    nrrd = tmp_path / "scan.nrrd"
+    sitk.WriteImage(sitk.GetImageFromArray(hu_volume()), str(nrrd))
+    work = tmp_path / "work"
+    work.mkdir()
+    said = []
+    args, extra = dicom_run.cohort_prepare_args(cohorts.custom("ct"), str(nrrd), None, work, echo=said.append)
+    out = args[args.index("--volume") + 1]
+    assert np.array_equal(sitk.GetArrayFromImage(sitk.ReadImage(str(out))), hu_volume())
+    assert said[0].startswith("converting NRRD to NIfTI: ") and extra["name"] == "scan"
+    nii = write_volume(tmp_path / "scan2.nii.gz")
+    said.clear()
+    args, extra = dicom_run.cohort_prepare_args(cohorts.custom("ct"), str(nii), None, work, echo=said.append)
+    assert args[args.index("--volume") + 1] == nii.resolve() and not said and "source_format" not in extra
+
+
+def test_a_folder_without_dicom_is_refused(tmp_path):
+    from chd_client.task import cohorts
+    (tmp_path / "empty").mkdir()
+    with pytest.raises(dicom_run.DicomRunError, match="no DICOM series"):
+        dicom_run.cohort_prepare_args(cohorts.custom("ct"), str(tmp_path / "empty"), None, tmp_path, echo=None)

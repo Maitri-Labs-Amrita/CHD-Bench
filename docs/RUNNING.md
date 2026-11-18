@@ -10,7 +10,7 @@ always stops it afterwards. It refuses `--slicer-url`: for a Slicer you started 
 |---|---|
 | `--imagechd ID` | an ImageCHD case (from runtime.json `imagechd_dir`), prepared for this episode only |
 | `--hvsmr N` | an HVSMR-2.0 case (`pat<N>`): its MRI, profile and prompt `chd_mr_v1` |
-| `--volume FILE` | any 3D scan as a NIfTI file (`.nii` or `.nii.gz`) |
+| `--volume SCAN` | any 3D scan: a NIfTI file (`.nii`, `.nii.gz`; used as it is), or a DICOM folder, a DICOM file or another image file (NRRD, MHA, ...), converted to NIfTI first. A DICOM folder with several series uses the one with the most files; CT comes out in HU; the converted file holds no patient fields and is deleted after the run |
 | `--modality ct\|mr` | with `--volume`: `ct` (values in HU; `chd_ct_v1`) or `mr` (rescaled so the 99.5th percentile is 1000; `chd_mr_v1`). Default `ct` |
 | `--truth CLASSES` | with `--volume`: the true diagnosis, comma-separated class names or `normal`. Without it the run is not scored |
 | `--labels gt\|FILE` | `gt` (the dataset's own segmentation) or a NIfTI label map on the scan's grid. Required for `--arm 3d_seg` and `2d_seg`, refused for `--arm 3d` |

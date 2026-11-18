@@ -1,6 +1,6 @@
 """./run.sh: one CHD episode with one command. It starts the eval Slicer, runs the episode and always stops Slicer.
 
-    ./run.sh --imagechd <ID> | --hvsmr <N> | --volume <FILE> [--labels ...] [--model <MODEL>] [any run-episode option]
+    ./run.sh --imagechd <ID> | --hvsmr <N> | --volume <SCAN> [--labels ...] [--model <MODEL>] [any run-episode option]
 
 run-episode's options: uv run run-episode --help.
 
@@ -138,7 +138,7 @@ def prepare(args, environ, env_path=env_file.ENV_FILE):
     a = options(args)
     if a.imagechd is None and a.hvsmr is None and a.volume is None:
         raise RunShError("a case is required: --imagechd ID (see uv run python -m chd_client.task.imagechd list), "
-                         "--hvsmr N or --volume FILE. Nothing ran.")
+                         "--hvsmr N or --volume SCAN (NIfTI, DICOM folder, ...). Nothing ran.")
     for opt, val in (("--imagechd", a.imagechd), ("--hvsmr", a.hvsmr)):
         if val is not None:
             try:
