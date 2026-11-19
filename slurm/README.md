@@ -34,10 +34,15 @@ uv run --group analysis python slurm/batch_metrics.py slurm/batches/<batch> --ru
   provider registry (`config/providers.json`); a job stops before Slicer starts when one is unset. Keys are never
   printed, and a scripted dry run gets none of them.
 - To stop a batch early: `scancel --signal=TERM <job>`. Each run then saves its folder.
-- Metrics (`batch_metrics.py`): per model and per class, sensitivity, specificity, precision, accuracy, balanced
+- Metrics (`batch_metrics.py`): per model and per class, sensitivity, specificity, precision, F1, accuracy, balanced
   accuracy and AUC; macro and micro averages; exact match. Every planned case counts once, at its last attempt; a
   planned case without an accepted report counts as every class absent. Normal is scored twice: `normal`, derived
   from the defect calls (score 1 - the largest defect P(present)), and `normal_explicit`, the model's own Normal call
   and confidence.
+  Derive Normal from all defect calls, including ImageCHD AVSD. Exclude AVSD from the class averages.
+  A supported class with no positive predictions has zero precision. The JSON field `macro_ci95` gives
+  intervals for macro F1, precision and sensitivity (recall). Each interval is the point estimate ± 1.96
+  bootstrap standard errors, using 2,000 patient resamples within the cohort (seed 0). Each resample
+  averages over classes with positive reference support, including derived Normal when present.
 - Audit a batch: `python3 slurm/check_batch.py audit slurm/batches/<batch>` (stdlib only), or with `--rescore` under
   `uv run python` to score every finished run again offline and compare with its `metrics.json`.

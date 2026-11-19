@@ -16,7 +16,7 @@ Normal has two scores: `normal` derives it from the defect calls (called present
 normal.json when the run has one.
 
 Per model, computed with scikit-learn on the pooled episodes (one row per episode, one column per class):
-- per class: n_pos, tp/fp/fn/tn, sensitivity, specificity, precision, accuracy, balanced accuracy, AUC (undefined when
+- per class: n_pos, tp/fp/fn/tn, sensitivity, specificity, precision, F1, accuracy, balanced accuracy, AUC (undefined when
   the class is all present or all absent in the truth);
 - macro (the headline): the mean of each per-class number over the classes with at least one positive case;
 - micro: the same numbers over every (episode, class) cell pooled;
@@ -35,7 +35,7 @@ from chd_client.task.diagnosis_schema import CHD_CLASSES, CLASS_FOR_FLAG
 
 NORMAL = "normal"
 NORMAL_EXPLICIT = "normal_explicit"
-METRICS = ("sensitivity", "specificity", "precision", "accuracy", "balanced_accuracy", "auc")
+METRICS = ("sensitivity", "specificity", "precision", "f1", "accuracy", "balanced_accuracy", "auc")
 
 
 def columns(classes) -> list:
@@ -59,8 +59,11 @@ def report_rows(report, normal=None, classes=CHD_CLASSES) -> tuple:
         return np.zeros(n + 2, int), np.full(n + 2, 0.5)
     cls = report["classes"]
     call = np.array([bool(cls[c]["present"]) for c in classes], dtype=int)
-    p = np.array([cls[c]["confidence"] if cls[c]["present"] else 1 - cls[c]["confidence"] for c in classes])
-    derived_call, derived_p = int(not call.any()), 1 - p.max()
+    defect_scores = {c: v["confidence"] if v["present"] else 1 - v["confidence"]
+                     for c, v in cls.items() if c != NORMAL}
+    p = np.array([defect_scores[c] for c in classes])
+    derived_call = int(not any(cls[c]["present"] for c in defect_scores))
+    derived_p = 1 - max(defect_scores.values())
     if normal is not None:
         ex_call = int(bool(normal["present"]))
         ex_p = normal["confidence"] if normal["present"] else 1 - normal["confidence"]
@@ -79,13 +82,46 @@ def binary(y, pred, score) -> dict:
     return {"n_pos": int(y.sum()), "tp": int(tp), "fp": int(fp), "fn": int(fn), "tn": int(tn),
             "sensitivity": _nan(recall_score(y, pred, zero_division=np.nan)) if y.any() else None,
             "specificity": _nan(recall_score(y, pred, pos_label=0, zero_division=np.nan)) if not y.all() else None,
-            "precision": _nan(precision_score(y, pred, zero_division=np.nan)),
+            "precision": _nan(precision_score(y, pred, zero_division=0 if y.any() else np.nan)),
+            "f1": _nan(2 * tp / (2 * tp + fp + fn)) if tp + fp + fn else None,
             "accuracy": _nan(accuracy_score(y, pred)),
             "balanced_accuracy": _nan(balanced_accuracy_score(y, pred)) if both else None,
             "auc": _nan(roc_auc_score(y, score)) if both else None}
 
 
-def model_metrics(Y, P, S, classes=CHD_CLASSES) -> dict:
+def headline_scores(counts):
+    """Macro F1, precision and recall over classes with positive reference support."""
+    positives, calls, hits = counts
+    keep = positives > 0
+    if not keep.any():
+        return np.full(3, np.nan)
+    positives, calls, hits = counts[:, keep]
+    return np.array([(2 * hits / (positives + calls)).mean(),
+                     (hits / np.maximum(calls, 1)).mean(), (hits / positives).mean()])
+
+
+def headline_summary(y, pred, case_ids):
+    """Resample patients within this cohort, keeping all observations for each sampled patient."""
+    patients, index = np.unique(case_ids, return_inverse=True)
+    counts = np.zeros((len(patients), 3, y.shape[1]), dtype=int)
+    np.add.at(counts, index, np.stack((y, pred, y * pred), axis=1))
+    point = headline_scores(counts.sum(axis=0))
+    rng = np.random.default_rng(0)
+    draws = []
+    for _ in range(2000):
+        sample = rng.integers(len(patients), size=len(patients))
+        scores = headline_scores(counts[sample].sum(axis=0))
+        if np.isfinite(scores).all():
+            draws.append(scores)
+    half_width = 1.96 * np.std(draws, axis=0, ddof=1) if len(draws) >= 2 else np.full(3, np.nan)
+    names = ("f1", "precision", "sensitivity")
+    points = dict(zip(names, map(_nan, point)))
+    intervals = {name: [_nan(value - width), _nan(value + width)]
+                 for name, value, width in zip(names, point, half_width)}
+    return points, intervals
+
+
+def model_metrics(Y, P, S, classes=CHD_CLASSES, case_ids=None) -> dict:
     """Metrics over the defect classes and the derived Normal; normal_explicit is reported per class only."""
     cols = columns(classes)
     per_class = {c: binary(Y[:, i], P[:, i], S[:, i]) for i, c in enumerate(cols)}
@@ -93,8 +129,11 @@ def model_metrics(Y, P, S, classes=CHD_CLASSES) -> dict:
     scored = [c for c in cols[:k] if per_class[c]["n_pos"] > 0]
     macro = {m: _nan(np.mean([per_class[c][m] for c in scored if per_class[c][m] is not None]))
              if any(per_class[c][m] is not None for c in scored) else None for m in METRICS}
-    return {"n_episodes": int(len(Y)), "exact_match": _nan(np.mean((Y[:, :k] == P[:, :k]).all(axis=1))),
-            "macro": {**macro, "classes": scored}, "micro": binary(Y[:, :k].ravel(), P[:, :k].ravel(),
+    if case_ids is None:
+        case_ids = np.arange(len(Y))
+    headline, intervals = headline_summary(Y[:, :k], P[:, :k], case_ids)
+    return {"macro_ci95": intervals, "n_episodes": int(len(Y)), "exact_match": _nan(np.mean((Y[:, :k] == P[:, :k]).all(axis=1))),
+            "macro": {**macro, **headline, "classes": scored}, "micro": binary(Y[:, :k].ravel(), P[:, :k].ravel(),
                                                                    S[:, :k].ravel()),
             "per_class": per_class}
 
@@ -168,7 +207,7 @@ def main(argv=None):
     res = {"batch": str(a.batch_dir), "dataset": dataset, "excluded_classes": [c for c in CHD_CLASSES if dataset == "imagechd" and c not in classes], "truth": source, "classes": columns(classes), "models": {}}
     for model, d in load(a.batch_dir, truth, classes).items():
         Y, P, S = (np.array([row[i] for row in d["rows"]]) for i in (2, 3, 4))
-        res["models"][model] = {**model_metrics(Y, P, S, classes), "attempts": d["attempts"],
+        res["models"][model] = {**model_metrics(Y, P, S, classes, case_ids=[int(row[0]) for row in d["rows"]]), "attempts": d["attempts"],
                                 "missing": d["missing"],
                                 "episodes": [{"case": c, "run_folder": rf} for c, rf, *_ in d["rows"]]}
     Path(a.out or Path(a.batch_dir) / "metrics.json").write_text(json.dumps(res, indent=1) + "\n")

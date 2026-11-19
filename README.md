@@ -160,7 +160,7 @@ Score a run again with `uv run --no-sync rescore <run folder>`.
 ## Batches
 
 `slurm/run_batch.py` runs many cases and models on one machine; `slurm/submit_parallel.sh` runs them on SLURM;
-`slurm/batch_metrics.py` computes per-class and averaged metrics. See [slurm/README.md](slurm/README.md).
+`slurm/batch_metrics.py` reports per-class scores and cohort averages. Its JSON output includes 95% patient-bootstrap intervals for macro F1, precision, and recall. See [slurm/README.md](slurm/README.md).
 
 ## Tests
 

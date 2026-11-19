@@ -130,3 +130,28 @@ def test_custom_classes_shape_every_row(tmp_path):
     Y, P, S = matrices(d)
     assert Y.tolist() == [[1, 1, 0, 0]] and P.tolist() == [[1, 0, 0, 0]]
     assert bm.model_metrics(Y, P, S, classes)["per_class"].keys() == set(bm.columns(classes))
+
+
+def test_excluded_avsd_still_prevents_a_normal_prediction():
+    avsd = "atrioventricular_septal_defect"
+    scored = tuple(c for c in bm.CHD_CLASSES if c != avsd)
+    calls, scores = bm.report_rows(report({avsd}), classes=scored)
+    assert not calls.any()
+    assert scores[-2] == pytest.approx(0.1)
+
+
+def test_macro_scores_and_patient_bootstrap():
+    # The first patient has a missed ASD. The second has a correctly called VSD.
+    y = np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
+    pred = np.array([[0, 0, 0, 0], [0, 1, 0, 0]])
+    # Each patient contributes two identical observations. Resample both together.
+    y = y.repeat(2, axis=0)
+    pred = pred.repeat(2, axis=0)
+    metrics = bm.model_metrics(y, pred, pred, (ASD, VSD), case_ids=[1, 1, 2, 2])
+    assert metrics["per_class"][ASD]["precision"] == 0
+    # Every draw contains only misses (0), only hits (1), or one of each (0.5).
+    indices = np.random.default_rng(0).integers(2, size=(2000, 2))
+    width = 1.96 * np.std(indices.mean(axis=1), ddof=1)
+    for key in ("f1", "precision", "sensitivity"):
+        assert metrics["macro"][key] == 0.5
+        assert metrics["macro_ci95"][key] == pytest.approx([0.5 - width, 0.5 + width], abs=0.00005)
