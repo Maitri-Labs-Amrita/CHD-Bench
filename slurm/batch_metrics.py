@@ -7,7 +7,7 @@ Reads every job's plan.json and results.jsonl (run_batch.py) and each run folder
 trace/normal.json. Truth: the ImageCHD diagnosis sheet (less the classes config/scoring_v1.json excludes), or
 the HVSMR-2.0 clinical table.
 
-Counting: each planned episode counts once. When a case was attempted more than once, its last attempt counts. A
+Counting: each planned episode counts once within its job. Within a job, use the last attempt for a case. Jobs for the same model are pooled. A
 planned case with no accepted report (cost cap, step budget, error, timeout, never started) counts as every class
 absent, Normal included, at P(present) 0.5, and is listed under `missing`.
 

@@ -17,13 +17,15 @@ slurm/submit_parallel.sh slurm/batch_config.json                      # the batc
 uv run --group analysis python slurm/batch_metrics.py slurm/batches/<batch> --runtime config/runtime.local.json
 ```
 
+The batch configs are runnable examples once you supply the data and masks. Their model choices and cost caps are examples. The supplement gives the settings used in the paper.
+
 - Edit the `#SBATCH` lines of `submit_parallel.sh` (partition, account, time) for your cluster. Each task uses 2 CPUs
   and 16 GB.
 - Config keys: `batch` (folder name); `jobs[]` = {name, model, effort, cases, extra_args}; `dataset` (`imagechd`,
   default, or `hvsmr`); `labels` (`gt`, or a NIfTI path with `{stem}`, the case's file stem); `cost_cap` (USD per
   episode); `episode_timeout_s`; `runtime_base` (the runtime copied per job with absolute paths, default
   `config/runtime.local.json`); `arm`: `3d_seg` (default; needs `labels`) or `3d`, CT without a segmentation
-  (`dataset` imagechd only, no `labels`; example `batch_config_nomask.example.json`).
+  (`dataset` imagechd only, no `labels`; example `batch_config_nomask.example.json`), or `2d_seg` (predicted or manual mask in the slice views only).
 - Output per job, in `slurm/batches/<batch>/job<k>_<name>/` (gitignored): `runtime.json`, `plan.json` (the planned
   cases), `job.log`, `logs/<case>.log`, `results.jsonl` (one line per attempt) and `eval_slicer.log`.
 - A failed or timed-out case is recorded and the next case runs.
@@ -35,8 +37,7 @@ uv run --group analysis python slurm/batch_metrics.py slurm/batches/<batch> --ru
   printed, and a scripted dry run gets none of them.
 - To stop a batch early: `scancel --signal=TERM <job>`. Each run then saves its folder.
 - Metrics (`batch_metrics.py`): per model and per class, sensitivity, specificity, precision, F1, accuracy, balanced
-  accuracy and AUC; macro and micro averages; exact match. Every planned case counts once, at its last attempt; a
-  planned case without an accepted report counts as every class absent. Normal is scored twice: `normal`, derived
+  accuracy and AUC; macro and micro averages; exact match. Within a job, the last recorded attempt for each planned case counts. Results are pooled by model across jobs. For a paper-style cohort, use one setting per batch and one planned entry per patient and model across jobs. A planned case without an accepted report counts as every class absent, including Normal. This differs from the valid-report-only analysis used for MedGemma in the paper. Normal is scored twice: `normal`, derived
   from the defect calls (score 1 - the largest defect P(present)), and `normal_explicit`, the model's own Normal call
   and confidence.
   Derive Normal from all defect calls, including ImageCHD AVSD. Exclude AVSD from the class averages.

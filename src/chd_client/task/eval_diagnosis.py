@@ -8,11 +8,11 @@ Reads <run>/trace: meta.json (client_meta.case_source: the dataset and case id, 
 report.json (the accepted diagnosis-v1 report). Truth = the ImageCHD case's diagnosis flags (imagechd.diagnoses),
 or the classes / flags given with --truth (for a case without dataset flags). Score: chd_client.task.scoring.multilabel.
 
-ImageCHD truth (config/scoring_v1.json imagechd.diagnosis): the 2021 sheet (imagechd.diagnosis_sheet). Every
-class is scored (AVSD too) and a case without flags is a normal heart (truth_verified true). The config's
-excluded_classes leaves classes out of every number, and unflagged_truth "unverified" marks a case without flags as
-unverified. Given truth (--truth) is
-taken as verified, with nothing left out.
+ImageCHD truth (config/scoring_v1.json imagechd.diagnosis): the 2021 sheet (imagechd.diagnosis_sheet). The default configuration
+excludes AVSD from the per-run defect scores and treats an empty defect list as Normal for evaluation.
+For an empty list, truth_verified records acceptance under the configured unflagged_truth policy.
+It does not distinguish an explicit Normal label from a missing diagnosis. With --truth the scorer uses
+the supplied classes and applies no dataset exclusions.
 
 Returns (prints) the result; writes nothing (the client keeps it in <run>/metrics.json). The flags are read only
 here, after the episode: they never go into a trace or the model's input. A run without a submitted report, with

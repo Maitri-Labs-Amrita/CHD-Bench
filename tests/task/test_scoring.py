@@ -137,7 +137,7 @@ def test_excluded_classes_leave_every_number():
 
 def test_imagechd_excludes_avsd_and_unflagged_truth_is_normal(tmp_path):
     """config/scoring_v1.json: AVSD is not scored (the sheet's AVSD column is ASD AND VSD), and a case without flags
-    is a normal heart."""
+    is scored as Normal under the benchmark convention."""
     pytest.importorskip("SimpleITK")
     from tests.task.imagechd_fake import make_dataset
     root = make_dataset(tmp_path / "ds", flags={1008: ["DORV"]})

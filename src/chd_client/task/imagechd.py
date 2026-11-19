@@ -120,7 +120,7 @@ def diagnosis_sheet(root, runtime=None) -> Path:
 
 def diagnoses(root, sheet=None) -> dict:
     """{case id: [flags present]} from `sheet` (default diagnosis_sheet(root); first row = the flag names, column A =
-    the case id; rows without a numeric id are skipped). [] = no flag: a normal heart."""
+    the case id; rows without a numeric id are skipped). An empty list means no positive defect flag. The benchmark scores this row as Normal."""
     rows = list(_rows(Path(sheet) if sheet else diagnosis_sheet(root)))
     if not rows:
         return {}

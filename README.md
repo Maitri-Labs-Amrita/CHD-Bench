@@ -21,7 +21,7 @@ The viewer is [slicer-eval-mcp](https://github.com/Maitri-Labs-Amrita/slicer-eva
 
 | You need | |
 |---|---|
-| Linux or macOS | Windows is not supported. No GPU is needed. |
+| Linux or macOS | Windows is not supported. The viewer can render on CPU. Local model inference may require a GPU. |
 | git | `git --version`. uv uses git to fetch slicer-mcp from GitHub. |
 | uv | `uv --version`. The Python package manager: it installs Python and everything else. To install it: `curl -LsSf https://astral.sh/uv/install.sh \| sh` ([other ways](https://docs.astral.sh/uv/getting-started/installation/)). |
 | 3D Slicer 5.10.0 | Linux: setup reuses yours (a `Slicer-5.10.0-linux-amd64` folder under your home folder or `/opt`, or `--slicer PATH`), else downloads it (414 MB; 1.5 GB unpacked) into `~/Applications/`. Other versions are not used. macOS: install the x86_64 build of [Slicer 5.10.0](https://download.slicer.org/) into `/Applications` first. |
@@ -49,6 +49,20 @@ Datasets are only for testing on their cases. Your own scans need none ([section
 own licences.
 
 ## 3. Run
+
+The examples below use the public datasets' manual masks to test the installation. The paper used
+out-of-fold SwinUNETR predictions. To run that setting, pass the predicted six-structure mask for the
+case to `--segmentation`, for example:
+
+```bash
+./run.sh --imagechd 1001 --segmentation /path/to/predictions/ct_1001_pred.nii.gz \
+  --model openrouter:google/gemini-4-argon --effort high --cost-cap 10
+```
+
+The paper used a 75-call budget and model-specific effort and output limits. The supplementary
+material lists those settings. Set `--cost-cap` for your run. This release supports the two public cohorts
+(110 ImageCHD and 51 eligible HVSMR-2.0 scans). It includes the interactive runner, prompts, tools and
+scorers. The release includes full-view and slice-only profiles for both public cohorts, and a no-segmentation profile for CT. The supplement describes the MRI no-segmentation setting, private cohort, predefined-view experiments and baseline methods. These require additional inputs or implementations outside this archive.
 
 ```bash
 ./run.sh --imagechd 1001 --segmentation gt --dry-run-scripted                          # free test, no model
@@ -96,7 +110,7 @@ fields, but not text burned into the images.
 | no `--segmentation` | the scan, the 3D view and the slices; no segmentation (CT only) |
 | `--segmentation --no-3d` | the scan and the segmentation in the slices; no 3D view or 3D tools |
 
-For ImageCHD and HVSMR-2.0, `--segmentation gt` is the dataset's own segmentation.
+For ImageCHD and HVSMR-2.0, `--segmentation gt` loads the manual labels. A predicted mask in the paper's exported layout uses labels 1, 2, 3, 4, 6 and 7 in both cohorts.
 
 ### The segmentation file
 
@@ -121,6 +135,8 @@ commas. CT scans have ImageCHD's 16 classes:
 | DORV | Double outlet right ventricle | PDA | Patent ductus arteriosus |
 | CAT | Common arterial trunk | PAS | Pulmonary artery sling |
 | CoA | Coarctation of the aorta | AAH | Aortic arch hypoplasia |
+
+The paper uses PA for pulmonary atresia and CA for common atrium. For command-line input, use the codes in the table above.
 
 MRI scans have HVSMR-2.0's 20 classes: `./run.sh --list classes`. `PA` is always the pulmonary artery segment;
 pulmonary atresia is `PuA`. A scan with a defect outside the list cannot be scored: leave `--truth` out.
@@ -166,17 +182,6 @@ Score a run again with `uv run --no-sync rescore <run folder>`.
 
 ```bash
 uv run --no-sync pytest -q
-```
-
-## Citation
-
-```bibtex
-@inproceedings{TODO,
-  title     = {TODO},
-  author    = {TODO},
-  booktitle = {TODO},
-  year      = {TODO}
-}
 ```
 
 ## License
