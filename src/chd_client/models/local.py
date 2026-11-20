@@ -20,6 +20,13 @@ tool_calls[].extra_content.google.thought_signature and refuses (HTTP 400) a lat
 (https://ai.google.dev/gemini-api/docs/generate-content/thought-signatures). OpenRouterModel keeps only id, type and
 function.
 
+send_reasoning (default on for LocalModel, off for other OpenAI-compatible endpoints; registry key send_reasoning):
+the reply's thinking (message.reasoning, or the older reasoning_content) is kept on the assistant message as
+"reasoning" and goes back in the next request. vLLM 0.32.0 takes "reasoning" on an assistant message and gives it to
+the chat template as reasoning_content. Chat templates that preserve earlier thinking (Qwen3.8: preserve_thinking, on
+by default) otherwise write an empty <think></think> for every earlier turn. request_config records send_reasoning
+when it is on.
+
 LocalModel is the local model gateway (chd-gateway, chd_client.gateway) at $CHD_LOCAL_BASE_URL: episode headers, no
 effort, not streamed. The gateway reports usage.cost (0.0 for a local model) and usage.cost_source
 ("zero_api_charge"). Its x_gateway (model revision, engine, interventions applied) and cost_source go into the turn's
@@ -77,7 +84,8 @@ class OpenAICompatibleModel(OpenRouterModel):
     def __init__(self, name, image_window=None, max_tokens=DEFAULT_MAX_TOKENS, client=None, base_url=None, sleep=time.sleep, *,
                  provider=None, api_key=None, effort=None, effort_param=None, extra_body=None, headers=None,
                  headers_env=None, episode_headers=False, x_gateway=False, cost=None, stream=None,
-                 max_tokens_param="max_tokens"):
+                 max_tokens_param="max_tokens", send_reasoning=False):
+        self.send_reasoning = send_reasoning
         self.headers_env = dict(headers_env or {})
         if client is None:
             if not base_url:
@@ -129,6 +137,8 @@ class OpenAICompatibleModel(OpenRouterModel):
             out["headers"] = dict(self.headers)
         if self.headers_env:
             out["headers_env"] = dict(self.headers_env)
+        if self.send_reasoning:
+            out["send_reasoning"] = True
         return out
 
     def _extra_headers(self) -> dict:
@@ -154,6 +164,11 @@ class OpenAICompatibleModel(OpenRouterModel):
         extra = _get(turn.raw.choices[0].message, "extra_content")
         if extra is not None:
             self.history[-1][1]["extra_content"] = extra
+        if self.send_reasoning:  # the turn's thinking goes back with it (module docstring: send_reasoning)
+            m = turn.raw.choices[0].message
+            r = _get(m, "reasoning") or _get(m, "reasoning_content")
+            if isinstance(r, str) and r.strip():
+                self.history[-1][1]["reasoning"] = r
         if self.x_gateway:
             gw, src = _get(turn.raw, "x_gateway"), _get(turn.raw.usage, "cost_source")
             if gw is not None:
@@ -210,7 +225,7 @@ class LocalModel(OpenAICompatibleModel):
                 raise RuntimeError(f"--model local:{name} needs ${BASE_URL_ENV}: the local model gateway's URL "
                                    "(e.g. http://127.0.0.1:8098/v1, chd-gateway's default port)")
             kw.setdefault("api_key", os.environ.get(API_KEY_ENV, NO_KEY))
-        kw = {"episode_headers": True, "x_gateway": True, "cost": {"source": "reported"}, **kw}
+        kw = {"episode_headers": True, "x_gateway": True, "cost": {"source": "reported"}, "send_reasoning": True, **kw}
         super().__init__(name, image_window=image_window, max_tokens=max_tokens, client=client, base_url=base_url,
                          sleep=sleep, **kw)
         self._limits_resolved = False

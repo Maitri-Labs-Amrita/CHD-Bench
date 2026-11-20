@@ -126,6 +126,48 @@ def test_requests_are_not_streamed():
     assert "stream" not in fake.requests[0] and m.request_config()["stream"] is False
 
 
+def thinking(text, field="reasoning"):
+    r = completion()
+    setattr(r.choices[0].message, field, text)
+    return r
+
+
+def _assistant_msgs(req):
+    return [x for x in req["messages"] if x.get("role") == "assistant"]
+
+
+def _two_turns(m):
+    t = m.step()
+    m.add_results([(t.calls[0], obs(1, ["3d"]))])
+    m.step()
+
+
+def test_the_thinking_of_a_turn_goes_back_in_the_next_request():
+    m, fake = model([thinking("the septum looks borderline at slice 40"), completion()])
+    _two_turns(m)
+    assert [a.get("reasoning") for a in _assistant_msgs(fake.requests[1])] == ["the septum looks borderline at slice 40"]
+    assert m.request_config()["send_reasoning"] is True
+
+
+def test_the_older_reasoning_content_field_is_sent_back_as_reasoning():
+    m, fake = model([thinking("old field", "reasoning_content"), completion()])
+    _two_turns(m)
+    assert _assistant_msgs(fake.requests[1])[0]["reasoning"] == "old field"
+
+
+def test_send_reasoning_off_keeps_the_old_requests():
+    m, fake = model([thinking("not sent"), completion()], send_reasoning=False)
+    _two_turns(m)
+    assert "reasoning" not in _assistant_msgs(fake.requests[1])[0]
+    assert "send_reasoning" not in m.request_config()
+
+
+def test_a_turn_without_thinking_adds_no_field():
+    m, fake = model([completion(), completion()])
+    _two_turns(m)
+    assert "reasoning" not in _assistant_msgs(fake.requests[1])[0]
+
+
 def _gateway_reply(status, code, message, calls, max_retries=2):
     """An openai SDK client whose every request gets this gateway error reply (the gateway's own body and header)."""
     import httpx2

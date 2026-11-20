@@ -54,14 +54,14 @@ NO_KEY = "local"
 KINDS = ("anthropic", "openrouter", "openai_compatible")
 FIELDS = {"_comment", "kind", "base_url", "base_url_env", "api_key_env", "api_key_optional", "headers",
           "headers_env", "episode_headers", "stream", "extra_body", "effort", "cost", "x_gateway", "max_tokens_param",
-          "max_output_tokens", "routing", "image_format"}
+          "max_output_tokens", "routing", "image_format", "send_reasoning"}
 KIND_FIELDS = {
     "anthropic": {"base_url", "base_url_env", "api_key_env", "api_key_optional", "cost"},
     "openrouter": {"base_url", "base_url_env", "api_key_env", "api_key_optional", "headers", "headers_env", "stream",
                    "cost", "routing", "image_format"},
     "openai_compatible": {"base_url", "base_url_env", "api_key_env", "api_key_optional", "headers", "headers_env",
                           "episode_headers", "stream", "extra_body", "effort", "cost", "x_gateway",
-                          "max_tokens_param", "max_output_tokens"},
+                          "max_tokens_param", "max_output_tokens", "send_reasoning"},
 }
 ENV_NAME = re.compile(r"[A-Z_][A-Z0-9_]*")
 AUTH_HEADERS = {"authorization", "api-key", "x-api-key", "cookie", "proxy-authorization"}
@@ -215,7 +215,7 @@ def check_entry(name, e, file="?"):
         _check_url(where, "base_url", e["base_url"])
     if kind != "anthropic" and not (e.get("base_url") or e.get("base_url_env")):
         raise ProviderError(f"{where}: needs base_url or base_url_env")
-    for k in ("api_key_optional", "episode_headers", "stream", "x_gateway"):
+    for k in ("api_key_optional", "episode_headers", "stream", "x_gateway", "send_reasoning"):
         if k in e:
             _type(where, k, e[k], bool, "true or false")
     if "headers" in e:
@@ -598,7 +598,8 @@ def make_adapter(name: str, *, effort=None, image_window=None, max_tokens=None, 
                 provider=provider, effort=effort, effort_param=e.get("effort"), extra_body=e.get("extra_body"),
                 headers=e.get("headers"), headers_env=e.get("headers_env"),
                 episode_headers=e.get("episode_headers", False), x_gateway=e.get("x_gateway", False), cost=e["cost"],
-                stream=e.get("stream", False), max_tokens_param=e.get("max_tokens_param", "max_tokens"), **out)
+                stream=e.get("stream", False), max_tokens_param=e.get("max_tokens_param", "max_tokens"),
+                send_reasoning=e.get("send_reasoning", bool(e.get("x_gateway"))), **out)
         if cls is LocalModel:
             m.max_tokens_option = max_tokens or None
             m.entry_output_limit = (e.get("max_output_tokens") or {}).get(model)
