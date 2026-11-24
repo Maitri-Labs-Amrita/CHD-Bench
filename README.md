@@ -65,9 +65,6 @@ To run on your own scans instead, skip this section and see [section 7](#7-your-
    ./setup.sh --hvsmr-dir /path/to/HVSMR-2.0
    ```
 
-   Setup checks the folder and saves its path in `config/runtime.local.json` (ImageCHD) or
-   `config/paths.local.json` (HVSMR-2.0).
-
 `./run.sh --list imagechd` and `./run.sh --list hvsmr` list the cases with their diagnoses. Class codes:
 [section 6](#6-class-codes).
 
@@ -75,14 +72,13 @@ To run on your own scans instead, skip this section and see [section 7](#7-your-
 
 The commands below need the ImageCHD and HVSMR-2.0 folders from [section 2](#2-data).
 
-1. Test the installation. No model is called: a fixed script makes a few tool calls and submits "no defect", which
-   checks that Slicer, the tools and the scoring work.
+1. Test the installation. No model is called, a fixed script makes a few tool calls and submits "no defect". This verified that Slicer, the tools and the scoring work.
 
    ```bash
    ./run.sh --imagechd 1001 --segmentation gt --dry-run-scripted
    ```
 
-2. Put your API key in `.env` (gitignored):
+2. Put your API key in `.env`:
 
    ```bash
    echo 'OPENROUTER_API_KEY=sk-or-...' >> .env
@@ -103,8 +99,7 @@ The commands below need the ImageCHD and HVSMR-2.0 folders from [section 2](#2-d
 
    A paid run asks for confirmation first (`--yes` skips it). Outputs: [section 9](#outputs).
 
-`--segmentation gt` shows the model the dataset's ground-truth segmentation. The paper showed predicted segmentations instead.
-See [section 4](#4-segmentation-masks).
+`--segmentation gt` shows the model the dataset's ground-truth segmentation. 
 
 ## 4. Segmentation masks
 
@@ -122,8 +117,7 @@ that did not train on that scan).
 
 - One NIfTI label map on the scan's grid: the same size and affine as the image file of the dataset.
 - Label values 1 LV, 2 RV, 3 LA, 4 RA, 6 Ao, 7 PA, in both cohorts. Other values are not shown (5, the myocardium,
-  is not shown). For other values, give `--segmentation-map`, e.g. `--segmentation-map 1=LV,2=RV,3=LA,4=RA,5=Ao,6=PA`
-  (the HVSMR-2.0 values).
+  is not shown). For other values, give `--segmentation-map`, e.g. `--segmentation-map 1=LV,2=RV,3=LA,4=RA,5=Ao,6=PA`.
 
 ## 5. The paper's settings
 
