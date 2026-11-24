@@ -49,6 +49,7 @@ sudo (Ubuntu and Debian; on other Linux, install Xvfb first).
 ## 2. Data
 
 The two public cohorts of the paper run with this repository. 3DLabsCHD (86 CT scans) is private.
+To run on your own scans instead, skip this section and see [section 7](#7-your-own-scan).
 
 1. Download each dataset from its link and put its files in one folder:
 
