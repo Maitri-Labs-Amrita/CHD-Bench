@@ -50,6 +50,9 @@ sudo (Ubuntu and Debian; on other Linux, install Xvfb first).
 
 The two public cohorts of the paper run with this repository. 3DLabsCHD (86 CT scans) is private.
 
+CHD-Bench does not download the datasets. Download each one from the link below, put its files in one folder, and
+give that folder to setup once ("Set it" column).
+
 | Dataset | Scans in the benchmark | Download | Folder contents | Set it |
 |---|---|---|---|---|
 | ImageCHD (Xu et al., MICCAI 2020) | 110 CT (all) | [Kaggle](https://www.kaggle.com/xiaoweixumedicalai/datasets) (free account) | `ct_<id>_image.nii.gz`, `ct_<id>_label.nii.gz`, `imagechd_dataset_image_info.xlsx`, `imageCHD_dataset_diagnosis_info(updated20210510).xlsx`, all in one folder | `./setup.sh --imagechd-dir <folder>` |
@@ -59,6 +62,8 @@ The two public cohorts of the paper run with this repository. 3DLabsCHD (86 CT s
 [section 6](#6-class-codes).
 
 ## 3. First run
+
+The commands below need the ImageCHD and HVSMR-2.0 folders from [section 2](#2-data).
 
 1. Test the installation. No model is called: a fixed script makes a few tool calls and submits "no defect", which
    checks that Slicer, the tools and the scoring work.
