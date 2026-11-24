@@ -104,8 +104,7 @@ The commands below need the ImageCHD and HVSMR-2.0 folders from [section 2](#2-d
 ## 4. Segmentation masks
 
 In the paper, the model sees six heart structures (LV, RV, LA, RA, Ao, PA) as 3D shells and as outlines on the
-slices. These masks came from a segmentation model, and each scan's mask was predicted out-of-fold (by a model
-that did not train on that scan).
+slices. These masks came from a segmentation model, and each scan's mask was predicted out-of-fold.
 
 | `--segmentation` | What the model sees |
 |---|---|
