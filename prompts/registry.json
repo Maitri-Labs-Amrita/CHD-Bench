@@ -39,6 +39,17 @@
       "summary": "Cardiac CT with no segmentation and no segmentation tools; 16 ImageCHD defect classes plus normal."
     },
     {
+      "version": "chd_mr_nomask_v1",
+      "file": "chd_mr_nomask_v1.md",
+      "sha256": "7cf9fb4a0666323e9f6ff6a615ae897cc31ce695dec3a9add246a89283f32640",
+      "arms": ["3d"],
+      "modality": "mr",
+      "profile": "profiles/chd_mr_nomask_v1",
+      "report_kind": "diagnosis_normal",
+      "toolset": "ct",
+      "summary": "Cardiac MRI with no segmentation and no segmentation tools; 20 HVSMR-2.0 defect classes plus normal."
+    },
+    {
       "version": "chd_ct_2dseg_v1",
       "file": "chd_ct_2dseg_v1.md",
       "sha256": "752d92c8c4a5ecbaea4ffaecfa008f7a43c068e2a65aed74b4964cd055d86488",

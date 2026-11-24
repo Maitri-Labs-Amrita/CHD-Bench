@@ -49,6 +49,19 @@ DEFAULT_FILE = REPO / "config" / "providers.json"
 PROVIDERS_ENV = "CHD_PROVIDERS"
 DEFAULT_PROVIDER = "anthropic"
 DEFAULT_MODEL = "claude-opus-5-5"
+# The reasoning effort of each interactive model in the paper (supplementary Table 3), keyed by the model id without
+# the provider prefix. A model that is not listed gets FALLBACK_EFFORT: the paper's rule is each model's highest
+# setting. --effort replaces both; --effort none sends no effort.
+PAPER_EFFORT = {
+    "google/gemini-4-argon": "high",
+    "openai/gpt-6.1-sol": "max",
+    "claude-opus-5-5": "max",
+    "moonshotai/kimi-k3.1-pro": "max",
+    "meta/muse-spark-open": "max",
+    "deepseek/deepseek-v4.1-flash": "max",
+    "qwen/qwen3.8-27b": "max",
+}
+FALLBACK_EFFORT = "max"
 KEY_HINT = "export it, or put it in .env and use ./run.sh"
 NO_KEY = "local"
 KINDS = ("anthropic", "openrouter", "openai_compatible")
@@ -75,6 +88,14 @@ ROUTING_FIELDS = {"order": list, "only": list, "ignore": list, "quantizations": 
 DATA_COLLECTION = ("allow", "deny")
 PRICE_FIELDS = {"input_per_mtok", "output_per_mtok", "cached_input_per_mtok"}
 ANTHROPIC_PRICE_FIELDS = PRICE_FIELDS | {"cache_write_per_mtok"}
+
+
+def resolve_effort(name: str, effort=None):
+    """The effort to send for --model `name`: `effort` when given ('none' or 'off': None, not sent), else the paper's
+    setting for this model (PAPER_EFFORT), else FALLBACK_EFFORT."""
+    if effort is not None:
+        return None if str(effort).strip().lower() in ("none", "off") else effort
+    return PAPER_EFFORT.get(str(name).split(":", 1)[-1], FALLBACK_EFFORT)
 
 
 class ProviderError(RuntimeError):

@@ -145,8 +145,8 @@ def test_cohorts_give_each_arm_its_profile_and_prompt():
     for c in cohorts.COHORTS.values():
         assert c.for_arm("3d_seg") == (c.profile, c.prompt)
         assert c.for_arm("2d_seg") == (c.no3d_profile, c.no3d_prompt)
-        with pytest.raises(cohorts.CohortError, match="no profile or prompt for arm '3d'"):
-            c.for_arm("3d")
+        assert c.for_arm("3d") == (cohorts.NOMASK_PROFILES[c.modality], cohorts.NOMASK_PROMPTS[c.modality])
+        assert re_mod.arm_profile("3d", c) == cohorts.NOMASK_PROFILES[c.modality]
         assert re_mod.arm_profile("2d_seg", c) == c.no3d_profile and re_mod.arm_profile("3d_seg", c) == c.profile
     assert re_mod.arm_profile("2d_seg") == NO3D_PROFILE and re_mod.arm_profile("3d_seg") is None
 

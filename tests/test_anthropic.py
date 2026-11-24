@@ -102,7 +102,7 @@ def test_request_shape_reasoning_usage_and_cost():
     req = fake.requests[0]
     assert req["model"] == "claude-opus-5-5" and req["max_tokens"] == 32000
     assert req["thinking"] == {"type": "adaptive", "display": "summarized"}
-    assert req["output_config"] == {"effort": "medium"} and req["tool_choice"] == {"type": "auto"}
+    assert req["output_config"] == {"effort": "max"} and req["tool_choice"] == {"type": "auto"}
     assert "betas" not in req and "fallbacks" not in req
     assert req["tools"] == [{"name": t.name, "description": t.description, "input_schema": t.input_schema}
                             for t in TOOLS]
@@ -194,7 +194,7 @@ def test_anthropic_episode_through_the_runner(tmp_path):
     srv, model, summary = run_in_process(tmp_path, responses)
     meta, steps = read_trace(srv.session.trace_dir)
     assert summary["stop_reason"] == "submitted" and meta["status"] == "submitted"
-    assert meta["model"]["id"] == "claude-opus-5-5" and meta["client_meta"]["effort"] == "medium"
+    assert meta["model"]["id"] == "claude-opus-5-5" and meta["client_meta"]["effort"] == "max"
     assert steps[1]["model_reasoning"] == "Start with the state." and steps[1]["tokens"] == {"in": 6100, "out": 20}
     assert steps[2]["model_reasoning"] == "Submitting."
     assert summary["tokens"] == {"in": 12200, "out": 40, "cache_read": 10000, "cache_write": 2000}

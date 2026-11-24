@@ -1,16 +1,16 @@
 """Run one episode: one model, one case, one arm, over the environment's MCP server.
 
     uv run run-episode --imagechd <id> --segmentation <labels.nii.gz | gt> --model openrouter:<slug> [--max-steps 75]
-                       [--cost-cap 3.0] [--effort high] [--runtime runtime.json] [--dry-run-scripted]
-    uv run run-episode --imagechd <id> --arm 3d --model openrouter:<slug> [...]        # no mask: the CT only
+                       [--cost-cap 10] [--effort high] [--runtime runtime.json] [--dry-run-scripted]
+    uv run run-episode --imagechd <id> --arm 3d --model openrouter:<slug> [...]        # no mask: the scan only
     uv run run-episode --imagechd <id> --arm 2d_seg --segmentation <labels> --model ... [...]  # no 3D view or 3D tools
 
 Three arms (prompt_registry.ARMS):
 - 3d_seg (the default): the model classifies the case with a preloaded segmentation. --segmentation is required: 'gt' or a label map, the segmentation shells it is shown.
-- 3d (the no-mask control): the model sees the CT only, with no segmentation of any kind: the profile
+- 3d (the no-mask control): the model sees the scan only, with no segmentation of any kind: the profile
   profiles/chd_ct_nomask_v1 (chd_ct_v1 without the segmentation section and its five tools) and the prompt
-  chd_ct_nomask_v1. --segmentation is refused. CT only (--imagechd, or --volume with --modality ct; an MRI has no no-mask
-  profile or prompt). The eval Slicer must run the same profile (`chd-slicer launch --profile
+  chd_ct_nomask_v1; for an MRI, profiles/chd_mr_nomask_v1 and chd_mr_nomask_v1 (chd_mr_v1 with the same parts removed).
+  --segmentation is refused. The eval Slicer must run the same profile (`chd-slicer launch --profile
   profiles/chd_ct_nomask_v1`; slurm/run_batch.py and ./run.sh do this for arm 3d): slicer-mcp refuses a bridge that
   loaded another protocol.
 - 2d_seg (no 3D view): 3d_seg without the 3D view: the profile chd_ct_no3d_v1 (or chd_mr_no3d_v1 for an MRI), the
@@ -104,10 +104,10 @@ def render_system(prompt_dir, max_steps: int, image_window=None, version=None, m
 
 
 def arm_profile(arm, cohort=None):
-    """The task profile slicer-mcp serves (and the eval Slicer loads) for an episode: chd_ct_nomask_v1 for the 3d
-    arm; for 2d_seg the cohort's no-3D copy, else chd_ct_no3d_v1; else the cohort's, else None (chd-slicer's default,
-    chd_ct_v1)."""
-    if arm == NOMASK_ARM:
+    """The task profile slicer-mcp serves (and the eval Slicer loads) for an episode: for the 3d arm the cohort's
+    no-segmentation copy, else chd_ct_nomask_v1; for 2d_seg the cohort's no-3D copy, else chd_ct_no3d_v1; else the
+    cohort's, else None (chd-slicer's default, chd_ct_v1)."""
+    if arm == NOMASK_ARM and cohort is None:
         return NOMASK_PROFILE
     if cohort is not None:
         return cohort.for_arm(arm)[0]
@@ -131,7 +131,7 @@ def check_arm_tools(arm, tools) -> None:
     seg = [t.name for t in tools if t.name in SEG_TOOLS]
     if seg:
         raise ValueError(f"arm {arm}: the env server offers the segmentation tools {seg}, so it runs a profile with a "
-                         f"segmentation; serve {NOMASK_PROFILE.relative_to(CLIENT_REPO)} for this arm (and launch "
+                         f"segmentation; serve the scan's *_nomask_v1 profile for this arm (and launch "
                          "the eval Slicer with it)")
 
 
@@ -427,7 +427,7 @@ async def _replay(prior, model, env, transcript, recorder, idents, obs0, max_ste
             "tokens": tokens, "env_s": env_s, "info": info}
 
 
-async def _run_episode(case_id, arm, model, target, *, max_steps=None, cost_cap_usd=3.0, seed=0,
+async def _run_episode(case_id, arm, model, target, *, max_steps=None, cost_cap_usd=10.0, seed=0,
                        prompt_dir=PROMPT_DIR, runs_dir=RUNS_DIR, traces_dir=None, extra_meta=None, echo=print,
                        make_pdf=True, case_source=None, prompt=None, case_check=None, term=None,
                        record_requests=True, resume=None) -> dict:
@@ -814,8 +814,8 @@ def make_model(name: str, effort: str, dry_run: bool, image_window=None, arm="3d
         if max_images is not None:
             m.max_images, m.max_images_source = max_images, "option"
         return m
-    from chd_client.models.registry import make_adapter
-    return make_adapter(name, effort=effort, image_window=image_window, max_tokens=max_tokens, providers=providers,
+    from chd_client.models.registry import make_adapter, resolve_effort
+    return make_adapter(name, effort=resolve_effort(name, effort), image_window=image_window, max_tokens=max_tokens, providers=providers,
                         max_images=max_images)
 
 
@@ -826,7 +826,7 @@ class PrelaunchError(Exception):
 class EpisodeParser(argparse.ArgumentParser):
     """run-episode's parser. The arm (the viewing setup; an internal name, never shown to people) follows the
     options: --segmentation gives 3d_seg (the scan, the segmentation and the 3D view), no --segmentation gives 3d (the scan and
-    the 3D view, CT only), --no-3d gives 2d_seg (slices and the segmentation, no 3D view). --arm (hidden; batch
+    the 3D view), --no-3d gives 2d_seg (slices and the segmentation, no 3D view). --arm (hidden; batch
     scripts) sets it directly. arm_auto records that it was chosen from the options. prelaunch refuses a setup that
     needs --segmentation without it, and the no-segmentation setup on an MRI scan."""
 
@@ -877,7 +877,7 @@ examples:
 
 what the model gets:
   with --segmentation              the scan, the segmentation and the 3D view
-  without --segmentation           the scan and the 3D view (CT only)
+  without --segmentation           the scan and the 3D view
   with --segmentation --no-3d      the scan and the segmentation, slices only
 
 more: README.md (setup, data, your own scans, your own GPU), docs/RUNNING.md, docs/MODELS.md"""
@@ -904,8 +904,7 @@ def parser(prog="run-episode") -> argparse.ArgumentParser:
     g = ap.add_argument_group("what the model sees")
     g.add_argument("--segmentation", dest="labels", default=None, metavar="gt|FILE",
                    help="the heart segmentation shown to the model (LV, RV, LA, RA, Ao, PA): gt (the dataset's "
-                        "own) or a NIfTI label map on the scan's grid. Without it, the model gets the scan alone "
-                        "(CT only)")
+                        "own) or a NIfTI label map on the scan's grid. Without it, the model gets the scan alone")
     g.add_argument("--labels", dest="labels", default=None, help=argparse.SUPPRESS)  # the old name (batch configs)
     g.add_argument("--segmentation-map", dest="label_map", metavar="MAP",
                    help="with a --segmentation file: which label value is which structure, e.g. "
@@ -928,13 +927,15 @@ def parser(prog="run-episode") -> argparse.ArgumentParser:
                         "local:<name> for a model on your own GPU (docs/GATEWAY.md). Keys go in .env")
     g.add_argument("--dry-run-scripted", action="store_true",
                    help="no model: a fixed script takes a few steps and submits 'normal'. Tests the setup")
-    g.add_argument("--cost-cap", type=_cost_cap, default=3.0, metavar="USD",
-                   help="stop the run when it has cost this many US dollars (default 3; 'none' = no limit)")
+    g.add_argument("--cost-cap", type=_cost_cap, default=10.0, metavar="USD",
+                   help="stop the run when it has cost this many US dollars (default 10, the paper's cap; 'none' = "
+                        "no limit)")
     g.add_argument("--max-steps", type=int, default=None, metavar="N",
                    help=f"stop after N steps; a step is one action of the model in the viewer (default "
                         f"{DEFAULT_MAX_STEPS})")
-    g.add_argument("--effort", default="medium",
-                   help="the model's reasoning effort, passed to the provider (default medium; e.g. low, high; "
+    g.add_argument("--effort", default=None,
+                   help="the model's reasoning effort, passed to the provider (default: the paper's setting for the "
+                        "model, high for Gemini 4 Argon and max for the other six; max for a model not in the paper; "
                         "none = not sent)")
 
     g = ap.add_argument_group("advanced (the defaults are the benchmark's settings)")
@@ -987,28 +988,21 @@ def prelaunch(a) -> tuple:
         what = "slices only (--no-3d) also shows" if a.arm == NO3D_ARM else "this setup shows"
         raise PrelaunchError(f"{what} the model a segmentation: add --segmentation gt (the dataset's own) or --segmentation "
                              "<file>")
-    if a.arm == NOMASK_ARM:
-        if coh is not None and coh.modality != "ct" and getattr(a, "arm_auto", False):
-            raise PrelaunchError("this MRI scan has no segmentation: add --segmentation gt (HVSMR) or --segmentation <label-map "
-                                 "file>. Running on the scan alone (no --segmentation) works for CT only")
-        if a.labels is not None:
-            raise PrelaunchError(f"--arm {NOMASK_ARM} shows the model the scan only, with no segmentation: leave out "
-                                 f"--segmentation {a.labels} (the segmentation shells are for --arm 3d_seg)")
-        if coh is not None and (coh.modality != "ct"):
-            raise PrelaunchError(f"--arm {NOMASK_ARM} (no mask) is for CT only: use --imagechd or --volume with "
-                                 "--modality ct")
+    if a.arm == NOMASK_ARM and a.labels is not None:
+        raise PrelaunchError(f"--arm {NOMASK_ARM} shows the model the scan only, with no segmentation: leave out "
+                             f"--segmentation {a.labels} (the segmentation shells are for --arm 3d_seg)")
     if custom and a.labels == "gt":
         raise PrelaunchError("--volume has no ground-truth segmentation: pass --segmentation <file>")
     try:
         if a.prompt:
             version = a.prompt
-        elif coh is not None and a.arm != NOMASK_ARM:
+        elif coh is not None:
             version = coh.for_arm(a.arm)[1]
         else:
             version = prompt_version(arm=a.arm)
         entry = prompt_registry.entry(PROMPT_DIR, version, a.arm)
         prompt_registry.check_runnable(entry, a.arm)
-        want = arm_profile(a.arm, coh if a.arm != NOMASK_ARM else None) or CLIENT_REPO / "profiles" / "chd_ct_v1"
+        want = arm_profile(a.arm, coh) or CLIENT_REPO / "profiles" / "chd_ct_v1"
         if entry.get("profile") and (CLIENT_REPO / entry["profile"]).resolve() != Path(want).resolve():
             raise prompt_registry.PromptRegistryError(
                 f"prompt {version} is written for {entry['profile']}, but this case runs {Path(want).name}: its "

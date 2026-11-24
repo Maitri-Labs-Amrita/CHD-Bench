@@ -431,6 +431,9 @@ def run_plan(a, dicom=None, modality_note=None) -> tuple[list[str], list[str]]:
         rows.append(("Model", f"{a.model} (your own server)"))
     else:
         rows.append(("Model", f"{a.model} (paid API)"))
+    if not a.dry_run_scripted:
+        from chd_client.models.registry import resolve_effort
+        rows.append(("Effort", resolve_effort(a.model, a.effort) or "not sent"))
     steps = a.max_steps if a.max_steps is not None else DEFAULT_MAX_STEPS
     cap = "no cost limit" if a.cost_cap is None else f"stops at ${a.cost_cap:.2f}"
     rows.append(("Limits", f"{cap} · at most {steps} steps"))

@@ -24,10 +24,10 @@ def config(tmp_path, **over):
 
 def test_example_config_is_six_jobs_three_models_two_runs(tmp_path):
     c = rb.load_config(config(tmp_path))
-    assert len(c["jobs"]) == 6 and c["cost_cap"] == 8.0
+    assert len(c["jobs"]) == 6 and c["cost_cap"] == 10.0
     models = [j["model"] for j in c["jobs"]]
     assert sorted(set(models)) == ["claude-opus-5-5", "openrouter:google/gemini-4-argon",
-                                   "openrouter:openai/gpt-6-astra"] and all(models.count(m) == 2 for m in models)
+                                   "openrouter:openai/gpt-6.1-sol"] and all(models.count(m) == 2 for m in models)
     for m in set(models):
         a, b = [j["cases"] for j in c["jobs"] if j["model"] == m]
         assert len(a) == len(b) == 5 and not set(a) & set(b)
@@ -76,8 +76,8 @@ def test_episode_commands(tmp_path):
     c["jobs"][2]["extra_args"] = ["--max-tokens", 64000]
     cmd = rb.episode_command(c, 2, 1003, "/x/runtime.json")
     assert cmd[:3] == ["uv", "run", "run-episode"] and cmd[cmd.index("--imagechd") + 1] == "1003"
-    assert cmd[cmd.index("--model") + 1] == "openrouter:openai/gpt-6-astra" and cmd[cmd.index("--effort") + 1] == "max"
-    assert cmd[cmd.index("--cost-cap") + 1] == "8" and cmd[cmd.index("--runtime") + 1] == "/x/runtime.json"
+    assert cmd[cmd.index("--model") + 1] == "openrouter:openai/gpt-6.1-sol" and cmd[cmd.index("--effort") + 1] == "max"
+    assert cmd[cmd.index("--cost-cap") + 1] == "10" and cmd[cmd.index("--runtime") + 1] == "/x/runtime.json"
     assert cmd[-4:] == ["--max-steps", "10", "--max-tokens", "64000"] and cmd[cmd.index("--arm") + 1] == "3d_seg"
     assert cmd[cmd.index("--labels") + 1] == "gt"
     dry = rb.episode_command(c, 2, 1003, "/x/runtime.json", dry_run=True)
@@ -160,3 +160,19 @@ def test_a_dry_run_does_not_count_for_a_real_model(tmp_path):
     (tmp_path / "results.jsonl").write_text(json.dumps({"case": 1001, "exit": 0, "command_sha256": dry}) + "\n")
     assert rb.finished_cases(tmp_path, {1001: real}) == set()
     assert rb.finished_cases(tmp_path, {1001: dry}) == {1001}
+
+
+PAPER_EFFORT = {"openrouter:google/gemini-4-argon": "high", "openrouter:openai/gpt-6.1-sol": "max",
+                "claude-opus-5-5": "max", "openrouter:moonshotai/kimi-k3.1-pro": "max",
+                "openrouter:meta/muse-spark-open": "max", "openrouter:deepseek/deepseek-v4.1-flash": "max",
+                "openrouter:qwen/qwen3.8-27b": "max"}
+
+
+@pytest.mark.parametrize("name, n_cases, n_jobs", [("main_imagechd", 110, 7), ("main_hvsmr", 51, 7),
+                                                   ("no3d_imagechd", 110, 1), ("no3d_hvsmr", 51, 1),
+                                                   ("noseg_imagechd", 110, 1), ("noseg_hvsmr", 51, 1)])
+def test_paper_configs_hold_the_paper_settings(name, n_cases, n_jobs):
+    c = rb.load_config(ROOT / "slurm" / "paper" / f"{name}.json")
+    assert c["cost_cap"] == 10.0 and c["extra_args"] == ["--max-steps", "75"] and len(c["jobs"]) == n_jobs
+    for j in c["jobs"]:
+        assert j["effort"] == PAPER_EFFORT[j["model"]] and len(set(j["cases"])) == len(j["cases"]) == n_cases

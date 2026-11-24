@@ -768,3 +768,17 @@ def test_every_adapter_defaults_to_the_shared_output_cap():
     assert DEFAULT_MAX_TOKENS == 32000
     for cls in (AnthropicModel, OpenRouterModel, OpenAICompatibleModel, LocalModel):
         assert inspect.signature(cls.__init__).parameters["max_tokens"].default == DEFAULT_MAX_TOKENS, cls.__name__
+
+
+def test_effort_defaults_to_the_paper_setting():
+    from chd_client.models.registry import resolve_effort
+    assert resolve_effort("openrouter:google/gemini-4-argon") == "high"
+    assert resolve_effort("claude-opus-5-5") == "max" and resolve_effort("openrouter:openai/gpt-6.1-sol") == "max"
+    assert resolve_effort("openrouter:some/other-model") == "max"
+    assert resolve_effort("openrouter:google/gemini-4-argon", "low") == "low"
+    assert resolve_effort("claude-opus-5-5", "none") is None
+
+
+def test_effort_none_leaves_output_config_out():
+    from chd_client.models.anthropic import AnthropicModel
+    assert "output_config" not in AnthropicModel(effort=None, client=object()).render_params()

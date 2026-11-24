@@ -10,22 +10,22 @@ A job runs under Xvfb, so it needs Linux with Xvfb (`./setup.sh` installs it). O
 episodes one by one with `./run.sh`.
 
 ```bash
-cp slurm/batch_config.example.json slurm/batch_config.json   # edit models, cases, labels, cost_cap
+cp slurm/batch_config.example.json slurm/batch_config.json   # or use a config in slurm/paper/
 uv run python slurm/run_batch.py --config slurm/batch_config.json --job 0 --plan   # print the plan, run nothing
 slurm/submit_parallel.sh slurm/batch_config.json --dry-run-scripted   # plumbing check: scripted model, no API calls
 slurm/submit_parallel.sh slurm/batch_config.json                      # the batch (API spend: cost_cap per episode)
 uv run --group analysis python slurm/batch_metrics.py slurm/batches/<batch> --runtime config/runtime.local.json
 ```
 
-The batch configs are runnable examples once you supply the data and masks. Their model choices and cost caps are examples. The supplement gives the settings used in the paper.
+`slurm/paper/` holds one config for each paper row that this repository can run, with the paper's cases, models, efforts and caps (README, section 6). `batch_config.example.json` is a small pilot with the same settings: three models, 10 ImageCHD cases. Both use the manual masks (`labels: "gt"`); for predicted masks, set `labels` to a path with `{case}` or `{stem}`.
 
 - Edit the `#SBATCH` lines of `submit_parallel.sh` (partition, account, time) for your cluster. Each task uses 2 CPUs
   and 16 GB.
 - Config keys: `batch` (folder name); `jobs[]` = {name, model, effort, cases, extra_args}; `dataset` (`imagechd`,
   default, or `hvsmr`); `labels` (`gt`, or a NIfTI path with `{stem}`, the case's file stem); `cost_cap` (USD per
-  episode); `episode_timeout_s`; `runtime_base` (the runtime copied per job with absolute paths, default
-  `config/runtime.local.json`); `arm`: `3d_seg` (default; needs `labels`) or `3d`, CT without a segmentation
-  (`dataset` imagechd only, no `labels`; example `batch_config_nomask.example.json`), or `2d_seg` (predicted or manual mask in the slice views only).
+  episode, default 10); `episode_timeout_s`; `runtime_base` (the runtime copied per job with absolute paths, default
+  `config/runtime.local.json`); `arm`: `3d_seg` (default; needs `labels`) or `3d`, the scan without a segmentation
+  (either dataset, no `labels`; example `batch_config_nomask.example.json`), or `2d_seg` (predicted or manual mask in the slice views only).
 - Output per job, in `slurm/batches/<batch>/job<k>_<name>/` (gitignored): `runtime.json`, `plan.json` (the planned
   cases), `job.log`, `logs/<case>.log`, `results.jsonl` (one line per attempt) and `eval_slicer.log`.
 - A failed or timed-out case is recorded and the next case runs.

@@ -8,7 +8,7 @@ Examples (from the CHD-Bench folder; pick a case with `uv run python -m chd_clie
 
     ./run.sh --imagechd 1001 --segmentation gt --dry-run-scripted                      # no model, no cost
     ./run.sh --imagechd 1001 --segmentation gt --model claude-opus-5-5                 # needs ANTHROPIC_API_KEY (or SDK auth)
-    ./run.sh --imagechd 1001 --segmentation gt --model 'openrouter:openai/gpt-6-astra' # needs OPENROUTER_API_KEY
+    ./run.sh --imagechd 1001 --segmentation gt --model 'openrouter:openai/gpt-6.1-sol'  # needs OPENROUTER_API_KEY
 
 What it does:
 1. Reads the API keys from .env in the CHD-Bench folder (KEY=value lines; gitignored), when the file exists. A
@@ -33,7 +33,7 @@ episode succeeded but Slicer did not stop (the stop failed, or it printed "not s
 model that cannot run (a missing key or price, ...); 128 + the signal number when a signal came while Slicer was
 starting, and on Linux also when the run was stopped by a signal (slicer-mcp xvfb-session).
 --runtime <file> is used for the launch and the stop too. The eval Slicer runs the episode's task profile
-(run_episode.arm_profile: chd_mr_v1 for MRI cases, chd_ct_nomask_v1 for --arm 3d, the *_no3d_v1 copy for --arm
+(run_episode.arm_profile: chd_mr_v1 for MRI cases, the *_nomask_v1 copy for --arm 3d, the *_no3d_v1 copy for --arm
 2d_seg; $CHD_RUN_SH_PROFILE in the episode shell).
 --slicer-url is refused: run.sh starts its own Slicer (for a Slicer you started yourself, use `uv run run-episode`).
 """

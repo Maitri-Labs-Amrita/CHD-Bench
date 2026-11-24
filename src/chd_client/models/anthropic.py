@@ -105,7 +105,7 @@ class AnthropicModel(ModelAdapter):
     prices = None  # PRICES; a registry entry with cost.prices sets its own (models.registry)
     resumed_binding = False  # set by restore(): the requests of a resumed episode set block_binding drop_block
 
-    def __init__(self, model="claude-opus-5-5", effort="medium", max_tokens=DEFAULT_MAX_TOKENS, image_window=None, client=None,
+    def __init__(self, model="claude-opus-5-5", effort="max", max_tokens=DEFAULT_MAX_TOKENS, image_window=None, client=None,
                  sleep=time.sleep):
         if client is None:
             import anthropic
@@ -132,8 +132,10 @@ class AnthropicModel(ModelAdapter):
         if self.image_window is not None or self.max_images is not None or self.resumed_binding:
             thinking["block_binding"] = {"prefix_mismatch_behavior": "drop_block"}
             extra["betas"] = list(BETAS)
+        if self.effort:
+            extra["output_config"] = {"effort": self.effort}
         return dict(model=self.model_id, max_tokens=self.max_tokens, thinking=thinking,
-                    output_config={"effort": self.effort}, tool_choice={"type": "auto"}, **extra)
+                    tool_choice={"type": "auto"}, **extra)
 
     def sdk_versions(self) -> dict:
         return _versions("anthropic")

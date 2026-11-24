@@ -167,7 +167,7 @@ def test_arm_3d_refuses_a_server_with_segmentation_tools(tmp_path):
         return [x for s in getattr(e, "exceptions", ()) for x in leaves(s)] or [e]
     err = [e for e in leaves(ei.value) if isinstance(e, ValueError)]
     assert err and re.search(r"arm 3d: the env server offers the segmentation tools .*serve "
-                             r"profiles/chd_ct_nomask_v1", str(err[0]))
+                             r"the scan's \*_nomask_v1 profile", str(err[0]))
     assert not any(c[0] == "reset_episode" for c in fake.calls)
 
 
@@ -260,14 +260,9 @@ def test_cli_3d_seg_serves_the_default_profile_with_labels(monkeypatch, tmp_path
 @pytest.mark.parametrize("argv, msg", [
     (["--imagechd", "1008", "--arm", "3d", "--labels", "gt"], "--arm 3d shows the model the scan only.*leave out "
                                                               "--segmentation gt"),
-    (["--hvsmr", "24", "--arm", "3d"], "--arm 3d \\(no mask\\) is for CT only: use --imagechd or --volume with "
-                                      "--modality ct"),
-    (["--volume", "/x.nii.gz", "--modality", "mr", "--arm", "3d"], "--arm 3d \\(no mask\\) is for CT only"),
     (["--imagechd", "1008", "--arm", "3d", "--prompt", CT], "is for the 3d_seg arm, not 3d"),
     (["--imagechd", "1008", "--arm", "3d_seg", "--labels", "gt", "--prompt", NOMASK], "is for the 3d arm, not 3d_seg"),
     (["--imagechd", "1008", "--arm", "3d_seg"], "this setup shows the model a segmentation: add --segmentation gt"),
-    (["--hvsmr", "24"], "this MRI scan has no segmentation: add --segmentation gt"),
-    (["--volume", "/x.nii.gz", "--modality", "mr"], "this MRI scan has no segmentation"),
 ])
 def test_cli_refuses_a_wrong_arm_combination(argv, msg, capsys):
     with pytest.raises(SystemExit) as ex:
@@ -318,7 +313,7 @@ def config(tmp_path, **over):
 
 
 def test_run_batch_arm_3d_commands_and_slicer_profile(tmp_path):
-    c = rb.load_config(config(tmp_path, arm="3d"))
+    c = rb.load_config(config(tmp_path, arm="3d", labels=None, cost_cap=8.0, extra_args=[]))
     cmd = rb.episode_command(c, 0, 1001, "/x/runtime.json")
     assert cmd == ["uv", "run", "run-episode", "--imagechd", "1001", "--arm", "3d", "--runtime", "/x/runtime.json",
                    "--cost-cap", "8", "--model", "claude-opus-5-5", "--effort", "max"]
@@ -332,7 +327,7 @@ def test_run_batch_arm_3d_commands_and_slicer_profile(tmp_path):
 def test_run_batch_3d_seg_command_is_pinned(tmp_path):
     """The 3d_seg command is pinned: its command_sha256 decides which cases a requeued job skips, so a change to it
     reruns every finished case."""
-    c = rb.load_config(config(tmp_path, labels="gt"))
+    c = rb.load_config(config(tmp_path, labels="gt", cost_cap=8.0, extra_args=[]))
     cmd = rb.episode_command(c, 0, 1001, "/x/runtime.json")
     assert cmd == ["uv", "run", "run-episode", "--imagechd", "1001", "--arm", "3d_seg", "--runtime",
                    "/x/runtime.json", "--cost-cap", "8", "--labels", "gt", "--model", "claude-opus-5-5", "--effort",
@@ -344,7 +339,6 @@ def test_run_batch_3d_seg_command_is_pinned(tmp_path):
 @pytest.mark.parametrize("over, msg", [
     ({"arm": "3d", "labels": "gt"}, "arm 3d shows no segmentation: remove `labels`"),
     ({"arm": "3d", "labels": "/m/ct_{case}_pred.nii.gz"}, "remove `labels`"),
-    ({"arm": "3d", "dataset": "hvsmr"}, "arm 3d \\(no mask\\) runs dataset imagechd only: hvsmr"),
     ({"arm": "3d_seg", "dataset": "other"}, r"dataset 'other': one of \('imagechd', 'hvsmr'\)"),
     ({"arm": "2d", "labels": "gt"}, r"arm '2d': one of \('3d_seg', '3d', '2d_seg'\)"),
     ({"arm": "3d_seg", "labels": None}, "the config needs `labels`"),
@@ -452,3 +446,49 @@ def test_the_shipped_nomask_example_config_loads(tmp_path):
     assert c["arm"] == "3d" and c["labels"] is None and c["dataset"] == "imagechd"
     cmd = rb.episode_command(c, 0, 1007, "/x/runtime.json")
     assert cmd[cmd.index("--arm") + 1] == "3d" and "--labels" not in cmd and cmd[-2:] == ["--max-steps", "75"]
+
+
+MR_NOMASK_PROFILE = PROMPT_DIR.parent / "profiles" / "chd_mr_nomask_v1"
+SEG_PROMPT_LINES = ("A segmentation of the heart is already loaded, with six structures: LV, RV, LA, RA, Ao and PA. It "
+                    "is a guide, not ground truth, and it can be wrong.\n\n",
+                    "- **Segmentation display:** `set_segment_visibility`, `set_segment_opacity`, `set_3d_content`, "
+                    "`set_slice_outlines`, `center_on_segments`.\n")
+
+
+@pytest.mark.parametrize("seg, nomask", [("chd_ct_v1", "chd_ct_nomask_v1"), ("chd_mr_v1", "chd_mr_nomask_v1")])
+def test_nomask_prompt_is_the_seg_prompt_without_the_segmentation_parts(seg, nomask):
+    """Both no-segmentation prompts follow one rule: the 3d_seg prompt without the segmentation sentence and the
+    segmentation tool line, nothing else."""
+    text = (PROMPT_DIR / f"{seg}.md").read_text()
+    assert all(text.count(x) == 1 for x in SEG_PROMPT_LINES)
+    for x in SEG_PROMPT_LINES:
+        text = text.replace(x, "")
+    assert text == (PROMPT_DIR / f"{nomask}.md").read_text()
+
+
+def test_mr_nomask_profile_is_chd_mr_v1_without_the_segmentation():
+    mr = json.loads((PROMPT_DIR.parent / "profiles" / "chd_mr_v1" / "protocol.json").read_text())
+    nm = json.loads((MR_NOMASK_PROFILE / "protocol.json").read_text())
+    assert "segmentation" not in nm and nm["mcp"]["tools"] == [t for t in mr["mcp"]["tools"] if t not in SEG_TOOLS]
+    assert {k for k in mr if mr[k] != nm.get(k)} == {"segmentation", "mcp", "config_version", "_comment"}
+    assert {k for k in mr["mcp"] if mr["mcp"][k] != nm["mcp"][k]} == {"tools"}
+    for f in ("presets.xml", "report.py"):
+        assert (MR_NOMASK_PROFILE / f).read_bytes() == (PROMPT_DIR.parent / "profiles" / "chd_mr_v1" / f).read_bytes()
+    load_profile(MR_NOMASK_PROFILE)
+
+
+@pytest.mark.parametrize("argv", [["--hvsmr", "24"], ["--hvsmr", "24", "--arm", "3d"],
+                                  ["--volume", "/x.nii.gz", "--modality", "mr"]])
+def test_mri_without_segmentation_runs_the_mr_nomask_profile_and_prompt(argv):
+    a = re_mod.parser().parse_args(argv + ["--dry-run-scripted"])
+    version, model = re_mod.prelaunch(a)[:2]
+    assert a.arm == "3d" and version == "chd_mr_nomask_v1"
+    assert re_mod.arm_profile(a.arm, re_mod.cohort_of(a)) == MR_NOMASK_PROFILE
+    assert not {c[0][0] for c in model.script} & set(SEG_TOOLS)
+
+
+def test_run_batch_runs_arm_3d_on_hvsmr(tmp_path):
+    c = rb.load_config(config(tmp_path, arm="3d", dataset="hvsmr", labels=None))
+    assert rb.slicer_profile(c) == str(MR_NOMASK_PROFILE)
+    cmd = rb.episode_command(c, 0, 24, "/x/runtime.json")
+    assert cmd[3:7] == ["--hvsmr", "24", "--arm", "3d"] and "--labels" not in cmd

@@ -20,14 +20,14 @@ it started, also after an error or Ctrl-C. It refuses `--slicer-url`: for a Slic
 | `--volume SCAN` | any 3D scan: a NIfTI file (`.nii`, `.nii.gz`; used as it is), or a DICOM folder, a DICOM file or another image file (NRRD, MHA, ...), converted to NIfTI first. A folder is searched with every folder under it (other files, such as label maps, are ignored); with several DICOM series it uses the one with the most files; CT comes out in HU; the converted file holds no patient fields and is deleted after the run |
 | `--modality ct\|mr` | with `--volume`: `ct` (values in HU; `chd_ct_v1`) or `mr` (rescaled so the 99.5th percentile is 1000; `chd_mr_v1`). Default `ct`; for a DICOM scan, run.sh takes it from the DICOM header (Modality MR adds `--modality mr`) |
 | `--truth CODE ...` | with `--volume`: the true diagnosis as class codes from `config/chd_classes.csv` (`./run.sh --list classes`), separated by spaces or commas, any case, e.g. `--truth VSD ToF`; or `--truth normal`. The codes never equal a segmentation structure name (`PA` is the pulmonary artery; pulmonary atresia is `PuA`). Without `--truth` the run is not scored and the RESULT box shows the model's diagnosis only |
-| `--segmentation gt\|FILE` | `gt` (the dataset's own segmentation) or a NIfTI label map on the scan's grid. Leave it out to run on the scan alone (CT only). Before Slicer starts, run.sh checks the file: its values against the label map, and its grid against the scan's |
+| `--segmentation gt\|FILE` | `gt` (the dataset's own segmentation) or a NIfTI label map on the scan's grid. Leave it out to run on the scan alone. Before Slicer starts, run.sh checks the file: its values against the label map, and its grid against the scan's |
 | `--segmentation-map MAP` | with a `--segmentation` file: label value to structure, e.g. `'1=LV,2=RV,3=LA,4=RA,6=Ao,7=PA'` (default: the ImageCHD codes, also for HVSMR and `--volume`) |
 | `--no-3d` | slices only: no 3D view and no 3D tools (rotate, cut away). Needs `--segmentation` |
 
 `--labels` and `--label-map`, the old names of `--segmentation` and `--segmentation-map`, still work.
 
 What the model gets: with `--segmentation`, the scan, the segmentation and the 3D view (the full setup); without
-`--segmentation`, the scan and the 3D view, no segmentation (CT only); with `--segmentation --no-3d`, the scan and the
+`--segmentation`, the scan and the 3D view, no segmentation; with `--segmentation --no-3d`, the scan and the
 segmentation in the slices only. Batch configs ([slurm/README.md](../slurm/README.md)) name these setups with an
 `arm` key.
 
@@ -42,7 +42,7 @@ The default prompts are in `prompts/` and listed in `prompts/registry.json` with
 |---|---|
 | `chd_ct_v1` | CT with a segmentation (ImageCHD classes) |
 | `chd_mr_v1` | MRI with a segmentation (HVSMR-2.0 classes) |
-| `chd_ct_nomask_v1` | CT without a segmentation (no `--segmentation`) |
+| `chd_ct_nomask_v1`, `chd_mr_nomask_v1` | CT / MRI without a segmentation (no `--segmentation`) |
 | `chd_ct_2dseg_v1`, `chd_mr_2dseg_v1` | CT / MRI with a segmentation and no 3D view (`--no-3d`) |
 
 `--prompt <name or file>` uses another registered prompt or your own file. Your text is used as written;
@@ -56,16 +56,16 @@ changed text under a new name.
 |---|---|
 | `--model MODEL` | `<provider>:<model>` or an Anthropic model id (default `claude-opus-5-5`); see [MODELS.md](MODELS.md) |
 | `--providers FILE` | another provider registry (default `$CHD_PROVIDERS`, else `config/providers.json` with its `.local.json` overlay) |
-| `--effort EFFORT` | Anthropic `output_config.effort`, OpenRouter `reasoning.effort`, or an OpenAI-compatible provider's effort parameter (default `medium`) |
+| `--effort EFFORT` | Anthropic `output_config.effort`, OpenRouter `reasoning.effort`, or an OpenAI-compatible provider's effort parameter. Default: the paper's setting for the model (`high` for Gemini 4 Argon, `max` for the other six paper models), `max` for any other model; `none` sends no effort |
 | `--seed N` | default 0 |
 | `--dry-run-scripted` | a scripted model: no API calls, no cost |
 
 ## Limits
 
 - `--max-steps N` (default 75): the tool-call budget.
-- `--cost-cap USD` (default 3.0; `none` for no cap). Before each turn the runner projects the next turn's cost and
+- `--cost-cap USD` (default 10, the paper's cap; `none` for no cap). Before each turn the runner projects the next turn's cost and
   stops when the spend plus the projection passes the cap, so the spend can pass the cap by up to about one turn.
-- `--max-tokens N` (default 32000 for every model): the output cap per model turn. A provider entry's
+- `--max-tokens N` (default 32000 for every model, the paper's cap): the output cap per model turn. A provider entry's
   `max_output_tokens`, or a local gateway's `capabilities.max_output_tokens`, lowers the default for that model; a
   larger value is refused before the run.
 

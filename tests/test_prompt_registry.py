@@ -23,6 +23,7 @@ from tests.fakes import CASE, make_env
 
 REG = json.loads((PROMPT_DIR / "registry.json").read_text())
 CT, MR, NOMASK = "chd_ct_v1", "chd_mr_v1", "chd_ct_nomask_v1"
+NOMASK_MR = "chd_mr_nomask_v1"
 NO3D_CT, NO3D_MR = "chd_ct_2dseg_v1", "chd_mr_2dseg_v1"  # the 2d_seg arm's (tests/test_no3d_arm.py)
 ENTRY_KEYS = {"version", "file", "sha256", "arms", "modality", "profile", "report_kind", "toolset", "summary"}
 
@@ -30,7 +31,8 @@ ENTRY_KEYS = {"version", "file", "sha256", "arms", "modality", "profile", "repor
 def test_every_prompt_file_is_registered_and_unchanged():
     files = {p.name for p in PROMPT_DIR.glob("*.md")}
     assert files == {e["file"] for e in REG["prompts"]} == {f"{CT}.md", f"{MR}.md", f"{NOMASK}.md",
-                                                                                f"{NO3D_CT}.md", f"{NO3D_MR}.md"}
+                                                                                f"{NOMASK_MR}.md", f"{NO3D_CT}.md",
+                                                                                f"{NO3D_MR}.md"}
     for e in REG["prompts"]:
         assert hashlib.sha256((PROMPT_DIR / e["file"]).read_bytes()).hexdigest() == e["sha256"], e["file"]
         assert set(e) == ENTRY_KEYS and e["summary"], e["version"]
@@ -205,7 +207,8 @@ def test_every_prompt_names_its_arms_toolset():
     """The prompt decides the tools: base for 3d_seg, ct for 3d, no3d for 2d_seg. A prompt for another toolset is refused."""
     reg = prompt_registry.load(PROMPT_DIR)
     assert {v: prompt_registry.server_toolset(e) for v, e in reg.items()} == {CT: "base", MR: "base", NOMASK: "ct",
-                                                                                      NO3D_CT: "no3d", NO3D_MR: "no3d"}
+                                                                                      NOMASK_MR: "ct", NO3D_CT: "no3d",
+                                                                                      NO3D_MR: "no3d"}
     assert prompt_registry.ARM_TOOLSETS == {"3d_seg": "base", "3d": "ct", "2d_seg": "no3d"}
     with pytest.raises(prompt_registry.PromptRegistryError, match="has no toolset"):
         prompt_registry.server_toolset({"version": "x", "arms": ["3d_seg"]})

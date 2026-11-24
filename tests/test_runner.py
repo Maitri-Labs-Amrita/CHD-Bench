@@ -39,7 +39,7 @@ def test_tools_filtered_verbatim_and_the_prompt_alone_in_system(tmp_path):
     cm = meta["client_meta"]
     assert meta["model"] == {"id": "scripted", "version": "scripted-v1"} and meta["seed"] == 0
     assert cm["prompt_version"] == "chd_ct_v1" and cm["image_window"] is None and cm["max_steps"] == 75
-    assert cm["cost_cap_usd"] == 3.0 and {"commit", "dirty"} <= set(cm["client_git"])
+    assert cm["cost_cap_usd"] == 10.0 and {"commit", "dirty"} <= set(cm["client_git"])
     assert len(meta["system_prompt_sha256"]) == 64 and len(cm["server_instructions_sha256"]) == 64
     assert summary["stop_reason"] == "submitted" and meta["status"] == "submitted"
 

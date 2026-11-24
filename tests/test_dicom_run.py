@@ -184,7 +184,6 @@ CASE_REQUIRED = "one of the arguments --imagechd --hvsmr --volume is required"
 
 @pytest.mark.parametrize("argv,msg", [
     ([], CASE_REQUIRED),
-    (["--hvsmr", "1008"], "this MRI scan has no segmentation: add --segmentation gt"),
     (["--labels", "gt"], CASE_REQUIRED),
     (["--imagechd", "1008", "--labels", "gt", "--dicom", "d"], "unrecognized arguments: --dicom"),
     (["--imagechd", "1008", "--labels", "gt", "--hvsmr", "12"], "not allowed with argument --imagechd"),

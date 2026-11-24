@@ -62,6 +62,9 @@ PROMPTS = {"ct": "chd_ct_v1", "mr": "chd_mr_v1"}
 # the 2d_seg arm's: each 3d_seg profile and prompt without the 3D view and the 3D-only tools
 NO3D_PROFILES = {"ct": REPO / "profiles" / "chd_ct_no3d_v1", "mr": REPO / "profiles" / "chd_mr_no3d_v1"}
 NO3D_PROMPTS = {"ct": "chd_ct_2dseg_v1", "mr": "chd_mr_2dseg_v1"}
+# the 3d arm's: each 3d_seg profile and prompt without the segmentation and the segmentation tools
+NOMASK_PROFILES = {"ct": REPO / "profiles" / "chd_ct_nomask_v1", "mr": REPO / "profiles" / "chd_mr_nomask_v1"}
+NOMASK_PROMPTS = {"ct": "chd_ct_nomask_v1", "mr": "chd_mr_nomask_v1"}
 
 
 class CohortError(ValueError):
@@ -150,13 +153,15 @@ class Cohort:
         return NO3D_PROMPTS[self.modality]
 
     def for_arm(self, arm) -> tuple:
-        """(task profile, prompt version) for an arm: 3d_seg's, or the 2d_seg arm's no-3D copies. CohortError for the
-        3d arm, which has no cohort profile (chd_ct_nomask_v1 is CT only)."""
-        from chd_client.prompt_registry import ARM, NO3D_ARM
+        """(task profile, prompt version) for an arm: 3d_seg's, the 2d_seg arm's no-3D copies, or the 3d arm's
+        no-segmentation copies (chd_ct_nomask_v1, chd_mr_nomask_v1)."""
+        from chd_client.prompt_registry import ARM, NO3D_ARM, NOMASK_ARM
         if arm == ARM:
             return self.profile, self.prompt
         if arm == NO3D_ARM:
             return self.no3d_profile, self.no3d_prompt
+        if arm == NOMASK_ARM:
+            return NOMASK_PROFILES[self.modality], NOMASK_PROMPTS[self.modality]
         raise CohortError(f"{self.name} has no profile or prompt for arm {arm!r}")
 
     @property

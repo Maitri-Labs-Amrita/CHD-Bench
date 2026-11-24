@@ -1,11 +1,14 @@
 {
- "_comment": "Copy to batch_config.json and set `cases` and `extra_args` (e.g. --labels with a NIfTI mask path, {case} = the case id). Effort: the highest each provider accepts (OpenRouter /api/v1/models reasoning.supported_efforts; Anthropic output_config.effort). The case ids below are placeholders.",
- "batch": "frontier-max-example",
+ "_comment": "A small pilot with the paper's settings: three models, 10 ImageCHD cases each, split over two jobs per model. Copy to batch_config.json and edit. The full paper batches are in slurm/paper/. labels gt loads the manual masks; for predicted masks, set a path with {case}.",
+ "batch": "paper-settings-pilot",
  "runtime_base": "config/runtime.local.json",
  "out_dir": "slurm/batches",
- "cost_cap": 8.0,
+ "cost_cap": 10.0,
  "episode_timeout_s": 5400,
- "extra_args": [],
+ "extra_args": [
+  "--max-steps",
+  "75"
+ ],
  "jobs": [
   {
    "name": "opus-a",
@@ -32,8 +35,8 @@
    ]
   },
   {
-   "name": "astra-a",
-   "model": "openrouter:openai/gpt-6-astra",
+   "name": "sol-a",
+   "model": "openrouter:openai/gpt-6.1-sol",
    "effort": "max",
    "cases": [
     1001,
@@ -44,8 +47,8 @@
    ]
   },
   {
-   "name": "astra-b",
-   "model": "openrouter:openai/gpt-6-astra",
+   "name": "sol-b",
+   "model": "openrouter:openai/gpt-6.1-sol",
    "effort": "max",
    "cases": [
     1006,
@@ -81,5 +84,5 @@
   }
  ],
  "arm": "3d_seg",
- "labels": "predictions/ct_{case}_pred.nii.gz"
+ "labels": "gt"
 }

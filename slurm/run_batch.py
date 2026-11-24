@@ -20,8 +20,8 @@ needs comes from the provider registry (chd_client.models.registry: the provider
 base_url_env); the job stops before Slicer starts when one is unset. --dry-run-scripted runs the scripted model (no API
 calls) for a plumbing check; --plan prints the job's runtime and commands and runs nothing.
 
-Arms (`arm`): 3d_seg (default; `labels` required: "gt" or a path with {case} / {stem}), 3d (no mask: the CT only,
-profile chd_ct_nomask_v1; `labels` must be absent or null; dataset imagechd only) or 2d_seg (3d_seg without the 3D view
+Arms (`arm`): 3d_seg (default; `labels` required: "gt" or a path with {case} / {stem}), 3d (no mask: the scan only,
+the dataset's *_nomask_v1 profile; `labels` must be absent or null; any dataset) or 2d_seg (3d_seg without the 3D view
 or the 3D tools: the dataset's *_no3d_v1 profile; `labels` required, any dataset).
 """
 
@@ -39,7 +39,7 @@ from pathlib import Path
 
 CLIENT_REPO = Path(__file__).resolve().parents[1]
 ENV_FILE = CLIENT_REPO / ".env"
-DEFAULTS = {"out_dir": "slurm/batches", "port_base": None, "cost_cap": 8.0, "episode_timeout_s": 5400,
+DEFAULTS = {"out_dir": "slurm/batches", "port_base": None, "cost_cap": 10.0, "episode_timeout_s": 5400,
             "extra_args": [], "runtime_base": str(CLIENT_REPO / "config" / "runtime.local.json"), "arm": "3d_seg",
             "labels": None,
             "reports_dir": None,
@@ -99,9 +99,6 @@ def load_config(path) -> dict:
         if c["labels"] is not None:
             raise BatchError(f"arm {NOMASK_ARM} shows no segmentation: remove `labels` ({c['labels']!r}) from the "
                              "config, or use arm 3d_seg")
-        if c["dataset"] != "imagechd":
-            raise BatchError(f"arm {NOMASK_ARM} (no mask) runs dataset imagechd only: {c['dataset']} has no no-mask "
-                             "profile or prompt; use arm 3d_seg with `labels`")
     if not c["labels"] and c["arm"] != NOMASK_ARM:
         raise BatchError("the config needs `labels` (\"gt\" or a path with {case})")
     if c["labels"] and c["labels"] != "gt" and "{case}" not in c["labels"] and "{stem}" not in c["labels"]:
@@ -186,7 +183,7 @@ def case_stem(config, case) -> str:
 
 def slicer_profile(config) -> str | None:
     """The eval Slicer's profile: the one run-episode serves for the arm and dataset (chd_client.run_episode
-    .arm_profile): the cohort's (HVSMR: chd_mr_v1), arm 3d's (chd_ct_nomask_v1), arm 2d_seg's (the dataset's *_no3d_v1
+    .arm_profile): the cohort's (HVSMR: chd_mr_v1), arm 3d's (the dataset's *_nomask_v1 copy), arm 2d_seg's (the dataset's *_no3d_v1
     copy), else None (chd-slicer's chd_ct_v1)."""
     from chd_client.run_episode import arm_profile
     from chd_client.task.cohorts import COHORTS
