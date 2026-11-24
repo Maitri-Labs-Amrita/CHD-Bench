@@ -55,6 +55,10 @@ To run on your own scans instead, skip this section and see [section 7](#7-your-
    | ImageCHD (Xu et al., MICCAI 2020) | 110 CT (all) | [Kaggle](https://www.kaggle.com/datasets/xiaoweixumedicalai/imagechd) | `ct_<id>_image.nii.gz`, `ct_<id>_label.nii.gz`, `imagechd_dataset_image_info.xlsx`, `imageCHD_dataset_diagnosis_info(updated20210510).xlsx`, all in one folder |
    | [HVSMR-2.0](https://segchd.csail.mit.edu/) (Pace et al., Scientific Data 2024) | 51 of 60 MRI | [figshare](https://figshare.com/articles/dataset/HVSMR-2_0_orig_/25226360) | `orig/pat<N>_orig.nii.gz`, `orig/pat<N>_orig_seg.nii.gz`, `hvsmr_clinical.csv` |
 
+   The ImageCHD download from Kaggle does not include the updated diagnosis sheet. Download
+   `imageCHD_dataset_diagnosis_info(updated20210510).xlsx` separately [here](https://www.kaggle.com/api/v1/datasets/download/macktan/imagechd-dataset/imageCHD_dataset_diagnosis_info%28updated20210510%29.xlsx)
+   and put it in the ImageCHD folder.
+
 2. Register each dataset folder with the corresponding command:
 
    ```bash
