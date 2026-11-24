@@ -24,11 +24,10 @@ the paper. [Section 5](#5-the-papers-settings) lists them.
 [3 First run](#3-first-run) ·
 [4 Segmentation masks](#4-segmentation-masks) ·
 [5 The paper's settings](#5-the-papers-settings) ·
-[6 Reproduce the paper's tables](#6-reproduce-the-papers-tables) ·
-[7 Scoring](#7-scoring) ·
-[8 Your own scan](#8-your-own-scan) ·
-[9 A model on your own GPU](#9-a-model-on-your-own-gpu) ·
-[10 Reference](#10-reference)
+[6 Scoring](#6-scoring) ·
+[7 Your own scan](#7-your-own-scan) ·
+[8 A model on your own GPU](#8-a-model-on-your-own-gpu) ·
+[9 Reference](#9-reference)
 
 ## 1. Install
 
@@ -57,7 +56,7 @@ The two public cohorts of the paper run with this repository. 3DLabsCHD (86 CT s
 | HVSMR-2.0 (Pace et al., Scientific Data 2024) | 51 of 60 MRI | [figshare](https://doi.org/10.6084/m9.figshare.c.7074755.v2) ([home page](https://segchd.csail.mit.edu/)) | `orig/pat<N>_orig.nii.gz`, `orig/pat<N>_orig_seg.nii.gz`, `hvsmr_clinical.csv` | `./setup.sh --hvsmr-dir <folder>` |
 
 `./run.sh --list imagechd` and `./run.sh --list hvsmr` list the cases with their diagnoses. Labels, exclusions and
-class lists: [section 7](#7-scoring).
+class lists: [section 6](#6-scoring).
 
 ## 3. First run
 
@@ -78,7 +77,7 @@ class lists: [section 7](#7-scoring).
    |---|---|
    | `claude-opus-5-5` or another Anthropic model id | `ANTHROPIC_API_KEY` |
    | `openrouter:<vendor>/<model>` | `OPENROUTER_API_KEY` |
-   | `local:<name>` ([section 9](#9-a-model-on-your-own-gpu)) | none |
+   | `local:<name>` ([section 8](#8-a-model-on-your-own-gpu)) | none |
 
 3. Run one case with the paper's settings:
 
@@ -87,7 +86,7 @@ class lists: [section 7](#7-scoring).
    ./run.sh --hvsmr 3 --segmentation gt --model openrouter:google/gemini-4-argon        # HVSMR-2.0 case 3 (MRI)
    ```
 
-   A paid run asks for confirmation first (`--yes` skips it). Outputs: [section 10](#outputs).
+   A paid run asks for confirmation first (`--yes` skips it). Outputs: [section 9](#outputs).
 
 `--segmentation gt` shows the model the dataset's ground-truth segmentation. The paper showed predicted segmentations instead.
 See [section 4](#4-segmentation-masks).
@@ -168,58 +167,7 @@ Retries in the paper:
   `--model openrouter_bedrock:openai/gpt-6.1-sol --max-images 96`. Older images become text placeholders, and their
   JSON is kept.
 
-## 6. Reproduce the paper's tables
-
-Each row of the paper that this repository can run has a batch config in `slurm/paper/`. The configs hold the
-paper's cases, models and settings, and `labels: "gt"` (the ground-truth segmentations). For your own predicted masks, set
-`labels` to a path with `{case}` (the case id: `1001`, `3`) or `{stem}` (`ct_1001`, `hvsmr_3`).
-
-| Paper row | Cohort | Config | Runs | Paper cost |
-|---|---|---|---|---|
-| Table 1, seven interactive VLMs | ImageCHD | `slurm/paper/main_imagechd.json` | 7 × 110 | about $780 |
-| Table 1, seven interactive VLMs | HVSMR-2.0 | `slurm/paper/main_hvsmr.json` | 7 × 51 | about $360 |
-| Table 2, No 3D (Gemini) | ImageCHD | `slurm/paper/no3d_imagechd.json` | 110 | about $125 |
-| Table 2, No 3D (Gemini) | HVSMR-2.0 | `slurm/paper/no3d_hvsmr.json` | 51 | about $58 |
-| Table 2, No segmentation (Gemini) | ImageCHD | `slurm/paper/noseg_imagechd.json` | 110 | about $150 |
-| Table 2, No segmentation (Gemini) | HVSMR-2.0 | `slurm/paper/noseg_hvsmr.json` | 51 | about $69 |
-
-Paper cost: the paper's mean cost per case times the number of runs.
-
-1. Print the plan of one job:
-
-   ```bash
-   uv run python slurm/run_batch.py --config slurm/paper/main_imagechd.json --job 0 --plan
-   ```
-
-2. Check the batch without API calls (scripted model):
-
-   ```bash
-   slurm/submit_parallel.sh slurm/paper/main_imagechd.json --dry-run-scripted
-   ```
-
-3. Run the batch. With SLURM, each job (one model) is one array task:
-
-   ```bash
-   slurm/submit_parallel.sh slurm/paper/main_imagechd.json
-   ```
-
-   Without SLURM, run the jobs one after the other on one Linux machine:
-   `uv run python slurm/run_batch.py --config slurm/paper/main_imagechd.json --job <k>` for k = 0 to 6.
-   A job runs its cases one after the other. To run faster, split a job's `cases` over several jobs with the same
-   `model` and `effort`: the scorer pools jobs of the same model.
-
-4. Score the batch (macro F1, precision, recall per model, with 95% bootstrap intervals):
-
-   ```bash
-   uv run --group analysis python slurm/batch_metrics.py slurm/batches/paper-main_imagechd
-   ```
-
-The paper's other rows are not in this repository: the static-view setting, the medical VLM baselines
-(ClinFusion-8B, M3D-LaMed, NV-Reason-CT, MedGemma-27B) and the MedicalNet classifier.
-
-Batch options, requeue and resume, and the audit command: [slurm/README.md](slurm/README.md).
-
-## 7. Scoring
+## 6. Scoring
 
 ### Metrics
 
@@ -233,7 +181,7 @@ Batch options, requeue and resume, and the audit command: [slurm/README.md](slur
 - 95% intervals: 2,000 patient-level bootstrap resamples within the cohort (seed 0). Each resample leaves out
   classes with no true cases. The interval is the point estimate ± 1.96 × the bootstrap standard error.
 
-One run: `uv run --no-sync rescore <run folder>` scores it again. A batch: `slurm/batch_metrics.py` (section 6). The
+One run: `uv run --no-sync rescore <run folder>` scores it again. A batch: `slurm/batch_metrics.py` ([slurm/README.md](slurm/README.md)). The
 scoring rules are in `config/scoring_v1.json` and `src/chd_client/task/eval_diagnosis.py`.
 
 ### ImageCHD (110 CT scans, 15 scored classes plus Normal)
@@ -271,7 +219,7 @@ From [config/chd_classes.csv](config/chd_classes.csv). ImageCHD's 16 classes:
 HVSMR-2.0's 20 classes: `./run.sh --list classes`. The paper writes PA for pulmonary atresia and CA for common
 atrium; on the command line, `PA` is the pulmonary artery segment and pulmonary atresia is `PuA`.
 
-## 8. Your own scan
+## 7. Your own scan
 
 ```bash
 ./run.sh --volume /path/to/patient_folder --model openrouter:google/gemini-4-argon
@@ -290,7 +238,7 @@ NIfTI copy of the scan, give that NIfTI as `--volume`.
 
 Use de-identified scans only: CHD-Bench drops the DICOM patient fields, not text burned into the images.
 
-## 9. A model on your own GPU
+## 8. A model on your own GPU
 
 `local:` models run through `chd-gateway`, an OpenAI-compatible server (Transformers, vLLM, or an existing server
 such as Ollama). Terminal 1:
@@ -310,7 +258,7 @@ echo 'CHD_LOCAL_BASE_URL=http://127.0.0.1:8098/v1' >> .env
 
 Other models, vLLM, SLURM GPU jobs and remote servers: [docs/GATEWAY.md](docs/GATEWAY.md).
 
-## 10. Reference
+## 9. Reference
 
 ### What the model gets
 

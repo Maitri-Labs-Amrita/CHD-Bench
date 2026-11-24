@@ -17,7 +17,7 @@ slurm/submit_parallel.sh slurm/batch_config.json                      # the batc
 uv run --group analysis python slurm/batch_metrics.py slurm/batches/<batch> --runtime config/runtime.local.json
 ```
 
-`slurm/paper/` holds one config for each paper row that this repository can run, with the paper's cases, models, efforts and caps (README, section 6). `batch_config.example.json` is a small pilot with the same settings: three models, 10 ImageCHD cases. Both use the ground-truth segmentations (`labels: "gt"`); for predicted masks, set `labels` to a path with `{case}` or `{stem}`.
+`slurm/paper/` holds one config for each paper row that this repository can run, with the paper's cases, models, efforts and caps. `batch_config.example.json` is a small pilot with the same settings: three models, 10 ImageCHD cases. Both use the ground-truth segmentations (`labels: "gt"`); for predicted masks, set `labels` to a path with `{case}` or `{stem}`.
 
 - Edit the `#SBATCH` lines of `submit_parallel.sh` (partition, account, time) for your cluster. Each task uses 2 CPUs
   and 16 GB.
