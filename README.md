@@ -24,7 +24,7 @@ the paper. [Section 5](#5-the-papers-settings) lists them.
 [3 First run](#3-first-run) ·
 [4 Segmentation masks](#4-segmentation-masks) ·
 [5 The paper's settings](#5-the-papers-settings) ·
-[6 Scoring](#6-scoring) ·
+[6 Class codes](#6-class-codes) ·
 [7 Your own scan](#7-your-own-scan) ·
 [8 A model on your own GPU](#8-a-model-on-your-own-gpu) ·
 [9 Reference](#9-reference)
@@ -55,8 +55,8 @@ The two public cohorts of the paper run with this repository. 3DLabsCHD (86 CT s
 | ImageCHD (Xu et al., MICCAI 2020) | 110 CT (all) | [Kaggle](https://www.kaggle.com/xiaoweixumedicalai/datasets) (free account) | `ct_<id>_image.nii.gz`, `ct_<id>_label.nii.gz`, `imagechd_dataset_image_info.xlsx`, `imageCHD_dataset_diagnosis_info(updated20210510).xlsx`, all in one folder | `./setup.sh --imagechd-dir <folder>` |
 | HVSMR-2.0 (Pace et al., Scientific Data 2024) | 51 of 60 MRI | [figshare](https://doi.org/10.6084/m9.figshare.c.7074755.v2) ([home page](https://segchd.csail.mit.edu/)) | `orig/pat<N>_orig.nii.gz`, `orig/pat<N>_orig_seg.nii.gz`, `hvsmr_clinical.csv` | `./setup.sh --hvsmr-dir <folder>` |
 
-`./run.sh --list imagechd` and `./run.sh --list hvsmr` list the cases with their diagnoses. Labels, exclusions and
-class lists: [section 6](#6-scoring).
+`./run.sh --list imagechd` and `./run.sh --list hvsmr` list the cases with their diagnoses. Class codes:
+[section 6](#6-class-codes).
 
 ## 3. First run
 
@@ -167,41 +167,7 @@ Retries in the paper:
   `--model openrouter_bedrock:openai/gpt-6.1-sol --max-images 96`. Older images become text placeholders, and their
   JSON is kept.
 
-## 6. Scoring
-
-### Metrics
-
-- Precision, recall and F1 for each class, then the mean over classes (macro) within each cohort. Each cohort is
-  scored on its own class list.
-- A class enters the mean only when it has at least one true case. Normal enters the mean in ImageCHD (13 Normal
-  cases) and HVSMR-2.0 (8 Normal cases).
-- A case is Normal when the model calls no defect present.
-- A class with true cases and no predicted cases has precision 0.
-- A planned case without an accepted report counts as every class absent.
-- 95% intervals: 2,000 patient-level bootstrap resamples within the cohort (seed 0). Each resample leaves out
-  classes with no true cases. The interval is the point estimate ± 1.96 × the bootstrap standard error.
-
-One run: `uv run --no-sync rescore <run folder>` scores it again. A batch: `slurm/batch_metrics.py` ([slurm/README.md](slurm/README.md)). The
-scoring rules are in `config/scoring_v1.json` and `src/chd_client/task/eval_diagnosis.py`.
-
-### ImageCHD (110 CT scans, 15 scored classes plus Normal)
-
-- Labels: the diagnosis sheet updated on 10 May 2021 (`imageCHD_dataset_diagnosis_info(updated20210510).xlsx`).
-  The older sheet is not read.
-- Normal: 6 scans are labelled Normal. 7 scans have no diagnosis in either sheet and are scored as Normal. In
-  total, 13 scans are Normal.
-- AVSD is not scored. In the updated sheet, the AVSD column is the logical AND of the ASD and VSD columns, so it
-  marks every case with both an ASD and a VSD as AVSD. The model still reports AVSD, and an AVSD call still rules out
-  Normal.
-
-### HVSMR-2.0 (51 of 60 MRI scans, 20 classes plus Normal)
-
-- Labels: `hvsmr_clinical.csv`. The paper uses 20 of its labels as CHD classes. It leaves out prior surgery (e.g.
-  Glenn, Fontan), Marfan syndrome, imaging artifacts and chamber dilation, because they do not name a CHD type.
-- 9 scans have no label left after this: 8 have dilation as their only finding and 1 has no clinical record. They
-  are not evaluated. 8 of the 51 are Normal.
-
-### Class codes
+## 6. Class codes
 
 From [config/chd_classes.csv](config/chd_classes.csv). ImageCHD's 16 classes:
 
@@ -231,7 +197,7 @@ atrium; on the command line, `PA` is the pulmonary artery segment and pulmonary 
 | a NIfTI, NRRD or MHA file | `--volume <file>` |
 | an MRI | `--modality mr` (a DICOM scan's modality is read from its header) |
 | a heart segmentation of the scan | `--segmentation <file>` ([format](#mask-file-format)) |
-| the known diagnosis | `--truth VSD ToF`, or `--truth normal` ([class codes](#class-codes)). Without `--truth` the run is not scored |
+| the known diagnosis | `--truth VSD ToF`, or `--truth normal` ([class codes](#6-class-codes)). Without `--truth` the run is not scored |
 
 With a DICOM folder as `--volume`, the segmentation must be on the grid of the converted scan. If you made it on a
 NIfTI copy of the scan, give that NIfTI as `--volume`.
