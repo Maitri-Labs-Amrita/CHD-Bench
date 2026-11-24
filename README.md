@@ -50,8 +50,6 @@ sudo (Ubuntu and Debian; on other Linux, install Xvfb first).
 
 The two public cohorts of the paper run with this repository. 3DLabsCHD (86 CT scans) is private.
 
-CHD-Bench does not download the datasets.
-
 1. Download each dataset from its link and put its files in one folder:
 
    | Dataset | Scans in the benchmark | Download | Folder contents |
