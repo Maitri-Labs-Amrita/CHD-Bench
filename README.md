@@ -50,13 +50,24 @@ sudo (Ubuntu and Debian; on other Linux, install Xvfb first).
 
 The two public cohorts of the paper run with this repository. 3DLabsCHD (86 CT scans) is private.
 
-CHD-Bench does not download the datasets. Download each one from the link below, put its files in one folder, and
-give that folder to setup once ("Set it" column).
+CHD-Bench does not download the datasets.
 
-| Dataset | Scans in the benchmark | Download | Folder contents | Set it |
-|---|---|---|---|---|
-| ImageCHD (Xu et al., MICCAI 2020) | 110 CT (all) | [Kaggle](https://www.kaggle.com/xiaoweixumedicalai/datasets) (free account) | `ct_<id>_image.nii.gz`, `ct_<id>_label.nii.gz`, `imagechd_dataset_image_info.xlsx`, `imageCHD_dataset_diagnosis_info(updated20210510).xlsx`, all in one folder | `./setup.sh --imagechd-dir <folder>` |
-| HVSMR-2.0 (Pace et al., Scientific Data 2024) | 51 of 60 MRI | [figshare](https://doi.org/10.6084/m9.figshare.c.7074755.v2) ([home page](https://segchd.csail.mit.edu/)) | `orig/pat<N>_orig.nii.gz`, `orig/pat<N>_orig_seg.nii.gz`, `hvsmr_clinical.csv` | `./setup.sh --hvsmr-dir <folder>` |
+1. Download each dataset from its link and put its files in one folder:
+
+   | Dataset | Scans in the benchmark | Download | Folder contents |
+   |---|---|---|---|
+   | ImageCHD (Xu et al., MICCAI 2020) | 110 CT (all) | [Kaggle](https://www.kaggle.com/xiaoweixumedicalai/datasets) (free account) | `ct_<id>_image.nii.gz`, `ct_<id>_label.nii.gz`, `imagechd_dataset_image_info.xlsx`, `imageCHD_dataset_diagnosis_info(updated20210510).xlsx`, all in one folder |
+   | HVSMR-2.0 (Pace et al., Scientific Data 2024) | 51 of 60 MRI | [figshare](https://doi.org/10.6084/m9.figshare.c.7074755.v2) ([home page](https://segchd.csail.mit.edu/)) | `orig/pat<N>_orig.nii.gz`, `orig/pat<N>_orig_seg.nii.gz`, `hvsmr_clinical.csv` |
+
+2. Give each folder to setup, once per dataset:
+
+   ```bash
+   ./setup.sh --imagechd-dir /path/to/ImageCHD
+   ./setup.sh --hvsmr-dir /path/to/HVSMR-2.0
+   ```
+
+   Setup checks the folder and saves its path in `config/runtime.local.json` (ImageCHD) or
+   `config/paths.local.json` (HVSMR-2.0).
 
 `./run.sh --list imagechd` and `./run.sh --list hvsmr` list the cases with their diagnoses. Class codes:
 [section 6](#6-class-codes).
