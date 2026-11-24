@@ -52,6 +52,8 @@ it again at any time. Options: `./setup.sh --help`. To remove CHD-Bench, delete 
 
 ## 2. Data
 
+Below are links to the available public datasets for CHD diagnosis. To use your own scans visit [section 8](#8-your-own-scan).
+
 The paper evaluates three cohorts. The two public cohorts run with this repository. 3DLabsCHD (86 CT scans) is a
 private hospital cohort and is not available.
 
