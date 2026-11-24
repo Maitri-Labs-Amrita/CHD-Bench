@@ -6,8 +6,8 @@
 #              [--shared DIR] [--check-case ID] [--skip-check]
 #
 # 1. Prerequisites: uv (https://docs.astral.sh/uv/) and git (uv fetches slicer-mcp from its git repository).
-# 2. uv sync --frozen --inexact: the locked versions, including slicer-mcp at the commit pyproject.toml pins
-#    ([tool.uv.sources] rev); uv.lock is not changed; installed extras such as transformers stay.
+# 2. uv sync --frozen --inexact: the locked versions, including slicer-mcp at the release pyproject.toml pins
+#    ([tool.uv.sources] tag); uv.lock is not changed; installed extras such as transformers stay.
 # 3. Slicer 5.10.0: --slicer PATH uses an existing one, else the one already in config/runtime.local.json. Else on
 #    Linux setup looks for an installed one (a Slicer-5.10.0-linux-amd64 folder up to 4 levels under your home
 #    folder or /opt, or Slicer on PATH) and reuses it: nothing is downloaded. Slicer folders of other versions are

@@ -323,7 +323,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "reportlab", specifier = ">=5.0.1" },
     { name = "simpleitk", specifier = ">=2.4" },
-    { name = "slicer-mcp", git = "https://github.com/Maitri-Labs-Amrita/slicer-eval-mcp?rev=ebd908db26ccf4a0b181523e30742747dd4152ae" },
+    { name = "slicer-mcp", git = "https://github.com/Maitri-Labs-Amrita/slicer-eval-mcp?tag=v0.1.0" },
     { name = "torch", marker = "extra == 'transformers'", specifier = ">=2.2" },
     { name = "torchvision", marker = "extra == 'transformers'" },
     { name = "transformers", marker = "extra == 'transformers'", specifier = ">=4.49" },
@@ -2480,7 +2480,7 @@ wheels = [
 [[package]]
 name = "slicer-mcp"
 version = "0.1.0"
-source = { git = "https://github.com/Maitri-Labs-Amrita/slicer-eval-mcp?rev=ebd908db26ccf4a0b181523e30742747dd4152ae#ebd908db26ccf4a0b181523e30742747dd4152ae" }
+source = { git = "https://github.com/Maitri-Labs-Amrita/slicer-eval-mcp?tag=v0.1.0#85dd80c9a64f70b115f083a783b0c16342dbdca3" }
 dependencies = [
     { name = "mcp" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },

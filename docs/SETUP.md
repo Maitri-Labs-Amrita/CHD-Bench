@@ -24,15 +24,15 @@ checked (no ImageCHD data); anything else = failed (the box and the lines under 
 
 slicer-mcp (the 3D Slicer environment, repository
 [slicer-eval-mcp](https://github.com/Maitri-Labs-Amrita/slicer-eval-mcp)) is a normal uv dependency, pinned to one
-commit in `pyproject.toml`:
+release tag in `pyproject.toml`:
 
 ```toml
 [tool.uv.sources]
-slicer-mcp = { git = "https://github.com/Maitri-Labs-Amrita/slicer-eval-mcp", rev = "<commit>" }
+slicer-mcp = { git = "https://github.com/Maitri-Labs-Amrita/slicer-eval-mcp", tag = "v0.1.0" }
 ```
 
-`uv.lock` records it and `uv sync` installs exactly that commit. Every run records the slicer-mcp version and commit
-in `provenance/provenance.json`. To move to another commit, change `rev` and run `uv lock`.
+`uv.lock` records the tag's commit and `uv sync` installs exactly that commit. Every run records the slicer-mcp version and commit
+in `provenance/provenance.json`. To move to another version, change `tag` (or set `rev` to a commit) and run `uv lock`.
 
 To work on both repositories at once, install a local checkout over the pinned one (the next `uv sync` restores the
 pin): `uv pip install -e ../slicer-eval-mcp`, then run commands with `uv run --no-sync`.

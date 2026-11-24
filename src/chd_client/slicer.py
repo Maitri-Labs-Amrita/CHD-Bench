@@ -1,7 +1,7 @@
 """The environment: slicer-mcp (the slicer-eval-mcp repo), run with CHD-Bench's task profile.
 
 CHD-Bench holds no environment code. slicer-mcp is a dependency installed from its git repository (pyproject
-[tool.uv.sources]; uv.lock records the exact commit, and `uv sync` installs that one). The package ships its Slicer
+[tool.uv.sources]; pinned to a release tag; uv.lock records its exact commit, and `uv sync` installs that one). The package ships its Slicer
 bridge and case-preparation scripts. Every run records the slicer-mcp version and commit it used (source()).
 
     chd-slicer launch [--no-main-window] [--check | --stop]     the Slicer that serves the bridge (slicer-mcp launch)
