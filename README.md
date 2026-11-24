@@ -38,7 +38,7 @@ at any time. Options: `./setup.sh --help`. To remove CHD-Bench, delete its folde
 
 ## 2. Data
 
-Datasets are only for testing on their cases. Your own scans need none ([section 4](#4-your-own-scan)).
+Below are links to the available public datasets for CHD diagnosis. To use your own scans visit [section 4](#4-your-own-scan).
 
 | Dataset | Scans | Download | Folder contents | Set it |
 |---|---|---|---|---|
