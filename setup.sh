@@ -216,7 +216,7 @@ else
   cat <<EOF
   NOT FOUND: $DATA_DIR
   The ImageCHD dataset (Xu et al., MICCAI 2020) needs a Kaggle login, so setup cannot download it:
-    https://www.kaggle.com/xiaoweixumedicalai/datasets
+    https://www.kaggle.com/datasets/xiaoweixumedicalai/imagechd
   Put ct_<id>_image.nii.gz, ct_<id>_label.nii.gz, imagechd_dataset_image_info.xlsx and
   imageCHD_dataset_diagnosis_info(updated20210510).xlsx in $CHD/data/ImageCHD_dataset/,
   or pass --imagechd-dir DIR, then run ./setup.sh again. Without the data the episode check is skipped.
