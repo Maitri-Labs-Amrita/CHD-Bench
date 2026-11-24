@@ -35,9 +35,8 @@ the paper. [Section 5](#5-the-papers-settings) lists them.
 | You need | |
 |---|---|
 | Linux or macOS | Windows is not supported. The viewer renders on CPU. A local model needs a GPU. |
-| git | `git --version`. uv uses git to fetch slicer-mcp from GitHub. |
-| uv | `uv --version`. The Python package manager: it installs Python and everything else. To install it: `curl -LsSf https://astral.sh/uv/install.sh \| sh` ([other ways](https://docs.astral.sh/uv/getting-started/installation/)). |
-| 3D Slicer 5.10.0 | Linux: setup reuses yours (a `Slicer-5.10.0-linux-amd64` folder under your home folder or `/opt`, or `--slicer PATH`), else downloads it (414 MB; 1.5 GB unpacked) into `~/Applications/`. Other versions are not used. macOS: install the x86_64 build of [Slicer 5.10.0](https://download.slicer.org/) into `/Applications` first. |
+| git, [uv](https://docs.astral.sh/uv/) | uv installs Python and all dependencies; it uses git to fetch slicer-mcp. |
+| 3D Slicer 5.10.0 | Linux: setup reuses a `Slicer-5.10.0-linux-amd64` folder under your home folder or `/opt` (or `--slicer PATH`), else downloads it (414 MB) into `~/Applications/`. macOS: install the x86_64 build of [Slicer 5.10.0](https://download.slicer.org/) into `/Applications` first. |
 
 ```bash
 git clone https://github.com/Maitri-Labs-Amrita/CHD-Bench.git
@@ -45,35 +44,31 @@ cd CHD-Bench
 ./setup.sh
 ```
 
-On Linux, setup adds a virtual display (Xvfb) and the system libraries Slicer needs when they are missing, into
-`~/.local/slicer-mcp-headless/`, without sudo (Ubuntu and Debian; on other Linux, install Xvfb first). You can run
-it again at any time. Options: `./setup.sh --help`. To remove CHD-Bench, delete its folder and
-`~/.local/slicer-mcp-headless/`.
+On Linux, setup installs Xvfb and the system libraries Slicer needs into `~/.local/slicer-mcp-headless/`, without
+sudo (Ubuntu and Debian; on other Linux, install Xvfb first).
 
 ## 2. Data
 
-Below are links to the available public datasets for CHD diagnosis. To use your own scans visit [section 8](#8-your-own-scan).
-
-The paper evaluates three cohorts. The two public cohorts run with this repository. 3DLabsCHD (86 CT scans) is a
-private hospital cohort and is not available.
+The two public cohorts of the paper run with this repository. 3DLabsCHD (86 CT scans) is private.
 
 | Dataset | Scans in the benchmark | Download | Folder contents | Set it |
 |---|---|---|---|---|
 | ImageCHD (Xu et al., MICCAI 2020) | 110 CT (all) | [Kaggle](https://www.kaggle.com/xiaoweixumedicalai/datasets) (free account) | `ct_<id>_image.nii.gz`, `ct_<id>_label.nii.gz`, `imagechd_dataset_image_info.xlsx`, `imageCHD_dataset_diagnosis_info(updated20210510).xlsx`, all in one folder | `./setup.sh --imagechd-dir <folder>` |
 | HVSMR-2.0 (Pace et al., Scientific Data 2024) | 51 of 60 MRI | [figshare](https://doi.org/10.6084/m9.figshare.c.7074755.v2) ([home page](https://segchd.csail.mit.edu/)) | `orig/pat<N>_orig.nii.gz`, `orig/pat<N>_orig_seg.nii.gz`, `hvsmr_clinical.csv` | `./setup.sh --hvsmr-dir <folder>` |
 
-To list the cases with their diagnoses: `./run.sh --list imagechd` and `./run.sh --list hvsmr`. The datasets keep
-their own licences. [Section 7](#7-scoring) gives the labels, the exclusions and the class lists of each cohort.
+`./run.sh --list imagechd` and `./run.sh --list hvsmr` list the cases with their diagnoses. Labels, exclusions and
+class lists: [section 7](#7-scoring).
 
 ## 3. First run
 
-1. Test the installation. This run is free: no model, a fixed script submits "normal".
+1. Test the installation. No model is called: a fixed script makes a few tool calls and submits "no defect", which
+   checks that Slicer, the tools and the scoring work.
 
    ```bash
    ./run.sh --imagechd 1001 --segmentation gt --dry-run-scripted
    ```
 
-2. Put your API key in `.env` in the CHD-Bench folder (gitignored), one `NAME=value` line:
+2. Put your API key in `.env` (gitignored):
 
    ```bash
    echo 'OPENROUTER_API_KEY=sk-or-...' >> .env
@@ -81,24 +76,21 @@ their own licences. [Section 7](#7-scoring) gives the labels, the exclusions and
 
    | `--model` | Key in `.env` |
    |---|---|
-   | `claude-opus-5-5` (the default) or another Anthropic model id | `ANTHROPIC_API_KEY` ([console.anthropic.com](https://console.anthropic.com)) |
-   | `openrouter:<vendor>/<model>` | `OPENROUTER_API_KEY` ([openrouter.ai](https://openrouter.ai)) |
-   | `openai:<model>` (add its prices first: [docs/MODELS.md](docs/MODELS.md)) | `OPENAI_API_KEY` |
-   | `local:<name>`, a model on your own GPU | none ([section 9](#9-a-model-on-your-own-gpu)) |
+   | `claude-opus-5-5` or another Anthropic model id | `ANTHROPIC_API_KEY` |
+   | `openrouter:<vendor>/<model>` | `OPENROUTER_API_KEY` |
+   | `local:<name>` ([section 9](#9-a-model-on-your-own-gpu)) | none |
 
-3. Run one case with a model. Each command uses the paper's settings for that model.
+3. Run one case with the paper's settings:
 
    ```bash
    ./run.sh --imagechd 1001 --segmentation gt --model openrouter:google/gemini-4-argon   # ImageCHD case 1001 (CT)
    ./run.sh --hvsmr 3 --segmentation gt --model openrouter:google/gemini-4-argon        # HVSMR-2.0 case 3 (MRI)
    ```
 
-   Before it starts, the run prints its plan (scan, segmentation, model, effort, limits) and asks you to confirm
-   a paid run. At the end it prints the diagnosis, the score and the path of the run folder
-   ([section 10](#outputs)).
+   A paid run asks for confirmation first (`--yes` skips it). Outputs: [section 10](#outputs).
 
 `--segmentation gt` shows the model the dataset's manual masks. The paper showed predicted masks instead.
-[Section 4](#4-segmentation-masks) tells you how to use predicted masks.
+See [section 4](#4-segmentation-masks).
 
 ## 4. Segmentation masks
 
@@ -118,11 +110,8 @@ that did not train on that scan).
 - Label values 1 LV, 2 RV, 3 LA, 4 RA, 6 Ao, 7 PA, in both cohorts. Other values are not shown (5, the myocardium,
   is not shown). For other values, give `--segmentation-map`, e.g. `--segmentation-map 1=LV,2=RV,3=LA,4=RA,5=Ao,6=PA`
   (the HVSMR-2.0 values).
-- Before Slicer starts, `run.sh` checks the label values and the grid against the scan.
 
 ### How the paper's masks were made
-
-To make masks like the paper's, train this model:
 
 | Setting | Value |
 |---|---|
@@ -146,8 +135,6 @@ Held-out Dice per structure:
 | 3DLabsCHD | 88 | .77 ± .21 | .73 ± .19 | .76 ± .15 | .73 ± .21 | .78 ± .16 | .62 ± .19 | .73 ± .12 |
 
 ## 5. The paper's settings
-
-These are the defaults. You do not have to set them.
 
 ### The episode
 
@@ -196,7 +183,7 @@ Provider routing (`config/providers.json`): Claude Opus 5.5 goes to the Anthropi
 OpenRouter with data collection denied. Gemini and the open-weight models also request zero-data-retention
 endpoints. GPT-6.1 Sol runs on OpenAI only.
 
-Retries in the paper, which you can repeat:
+Retries in the paper:
 
 - **DeepSeek and Qwen:** two cases each stopped at the output cap. They were run again with `--max-tokens 64000`.
 - **Moderation blocks:** OpenRouter's moderation blocked one ImageCHD scan and one 3DLabsCHD scan for GPT-6.1 Sol.
@@ -219,10 +206,9 @@ paper's cases, models and settings, and `labels: "gt"` (the manual masks). For y
 | Table 2, No segmentation (Gemini) | ImageCHD | `slurm/paper/noseg_imagechd.json` | 110 | about $150 |
 | Table 2, No segmentation (Gemini) | HVSMR-2.0 | `slurm/paper/noseg_hvsmr.json` | 51 | about $69 |
 
-The costs come from the mean cost per case in the paper, times the number of runs. Run a few cases first to check
-your own costs.
+Paper cost: the paper's mean cost per case times the number of runs.
 
-1. Print the plan of one job. Nothing runs:
+1. Print the plan of one job:
 
    ```bash
    uv run python slurm/run_batch.py --config slurm/paper/main_imagechd.json --job 0 --plan
@@ -245,7 +231,7 @@ your own costs.
    A job runs its cases one after the other. To run faster, split a job's `cases` over several jobs with the same
    `model` and `effort`: the scorer pools jobs of the same model.
 
-4. Score the batch. You get macro F1, precision and recall per model, with 95% bootstrap intervals:
+4. Score the batch (macro F1, precision, recall per model, with 95% bootstrap intervals):
 
    ```bash
    uv run --group analysis python slurm/batch_metrics.py slurm/batches/paper-main_imagechd
@@ -292,8 +278,7 @@ scoring rules are in `config/scoring_v1.json` and `src/chd_client/task/eval_diag
 
 ### Class codes
 
-`--truth` takes the codes in [config/chd_classes.csv](config/chd_classes.csv), in any case, separated by spaces or
-commas. CT scans have ImageCHD's 16 classes:
+From [config/chd_classes.csv](config/chd_classes.csv). ImageCHD's 16 classes:
 
 | Code | Class | Code | Class |
 |---|---|---|---|
@@ -306,8 +291,8 @@ commas. CT scans have ImageCHD's 16 classes:
 | CAT | Common arterial trunk | PAS | Pulmonary artery sling |
 | CoA | Coarctation of the aorta | AAH | Aortic arch hypoplasia |
 
-MRI scans have HVSMR-2.0's 20 classes: `./run.sh --list classes`. The paper writes PA for pulmonary atresia and CA
-for common atrium. On the command line, `PA` is always the pulmonary artery segment, and pulmonary atresia is `PuA`.
+HVSMR-2.0's 20 classes: `./run.sh --list classes`. The paper writes PA for pulmonary atresia and CA for common
+atrium; on the command line, `PA` is the pulmonary artery segment and pulmonary atresia is `PuA`.
 
 ## 8. Your own scan
 
@@ -326,13 +311,12 @@ for common atrium. On the command line, `PA` is always the pulmonary artery segm
 With a DICOM folder as `--volume`, the segmentation must be on the grid of the converted scan. If you made it on a
 NIfTI copy of the scan, give that NIfTI as `--volume`.
 
-The model provider receives images of the scan: use de-identified scans only. CHD-Bench drops the DICOM patient
-fields, but not text burned into the images.
+Use de-identified scans only: CHD-Bench drops the DICOM patient fields, not text burned into the images.
 
 ## 9. A model on your own GPU
 
-`local:` models run through `chd-gateway`, an OpenAI-compatible server in this repository (Transformers, vLLM, or
-an existing server such as Ollama). Terminal 1, in the CHD-Bench folder:
+`local:` models run through `chd-gateway`, an OpenAI-compatible server (Transformers, vLLM, or an existing server
+such as Ollama). Terminal 1:
 
 ```bash
 uv sync --frozen --inexact --extra transformers
@@ -385,4 +369,4 @@ uv run --no-sync pytest -q
 
 ### License
 
-Apache-2.0 ([LICENSE](LICENSE)). The datasets keep their own licences.
+Apache-2.0 ([LICENSE](LICENSE)).
