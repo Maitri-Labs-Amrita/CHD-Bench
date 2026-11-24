@@ -134,7 +134,7 @@ that did not train on that scan).
 | Tool-call budget | 75 calls | `--max-steps` |
 | Cost cap per episode | USD 10 | `--cost-cap` |
 | Output cap per model turn | 32,000 tokens | `--max-tokens` |
-| Reasoning effort | per model, table below | `--effort` |
+| Reasoning effort | the model's highest: `high` for Gemini 4 Argon, `max` for the others | `--effort` |
 | Sampling temperature | not sent: each provider's default | none |
 | Images | 512 × 512 per view, lossless (PNG to Anthropic, lossless WebP to OpenRouter) | none |
 | Conversation | the full history with every earlier image in each request | `--max-images`, `--image-window` (off) |
@@ -154,33 +154,6 @@ System prompts (`prompts/`):
 The MRI prompts differ from the CT prompts in three places: they name MRI instead of CT, they list the 20 HVSMR-2.0
 classes plus normal, and they add a note that MRI intensities are signal values, not HU. The no-segmentation prompts
 are the full prompts without the sentence on the loaded segmentation and without the segmentation tools.
-
-### The models
-
-The paper sets each model to its highest reasoning setting. `--effort` replaces it. A model that is not in this table
-gets `max`; if its provider refuses `max`, pass a lower `--effort`.
-
-| Model | `--model` | Effort | Mean cost per case in the paper |
-|---|---|---|---|
-| Gemini 4 Argon | `openrouter:google/gemini-4-argon` | high | $1.31 |
-| GPT-6.1 Sol | `openrouter:openai/gpt-6.1-sol` | max | $0.74 |
-| Claude Opus 5.5 | `claude-opus-5-5` | max | $2.91 |
-| Kimi K3.1 Pro | `openrouter:moonshotai/kimi-k3.1-pro` | max | $1.16 |
-| Muse Spark Open | `openrouter:meta/muse-spark-open` | max | $0.49 |
-| DeepSeek V4.1 Flash | `openrouter:deepseek/deepseek-v4.1-flash` | max | $0.21 |
-| Qwen3.8-27B | `openrouter:qwen/qwen3.8-27b` | max | $0.26 |
-
-Provider routing (`config/providers.json`): Claude Opus 5.5 goes to the Anthropic API. The other models go through
-OpenRouter with data collection denied. Gemini and the open-weight models also request zero-data-retention
-endpoints. GPT-6.1 Sol runs on OpenAI only.
-
-Retries in the paper:
-
-- **DeepSeek and Qwen:** two cases each stopped at the output cap. They were run again with `--max-tokens 64000`.
-- **Moderation blocks:** OpenRouter's moderation blocked one ImageCHD scan and one 3DLabsCHD scan for GPT-6.1 Sol.
-  They were run again through Amazon Bedrock, which takes at most 100 images per request:
-  `--model openrouter_bedrock:openai/gpt-6.1-sol --max-images 96`. Older images become text placeholders, and their
-  JSON is kept.
 
 ## 6. Class codes
 
