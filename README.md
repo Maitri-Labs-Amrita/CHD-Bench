@@ -111,29 +111,6 @@ that did not train on that scan).
   is not shown). For other values, give `--segmentation-map`, e.g. `--segmentation-map 1=LV,2=RV,3=LA,4=RA,5=Ao,6=PA`
   (the HVSMR-2.0 values).
 
-### How the paper's masks were made
-
-| Setting | Value |
-|---|---|
-| Network | SwinUNETR (MONAI), feature size 48, stochastic depth 0.15, 1 input channel, 7 output channels (background, LV, RV, LA, RA, Ao, PA), random initialization (no pretrained weights) |
-| Training data | ImageCHD (110), HVSMR-2.0 (60) and 3DLabsCHD (88) ground-truth segmentations, trained together |
-| Cross-validation | 3 folds, made within each cohort and stratified by CHD type: 37/37/36 ImageCHD, 20/20/20 HVSMR-2.0, 29/29/30 3DLabsCHD. Each fold's model trains on the other two folds of all cohorts and predicts its own fold |
-| Labels | ImageCHD and 3DLabsCHD: 1 LV, 2 RV, 3 LA, 4 RA, 6 Ao, 7 PA. HVSMR-2.0 is mapped to this scheme: Ao 5→6, PA 6→7, SVC, IVC and myocardium → background. Myocardium is not a training class |
-| Preprocessing | crop to the heart region, reorient to RAS, resize to 128 × 128 × 128 (trilinear for images, nearest-neighbor for labels), z-score over nonzero voxels. No augmentation |
-| Loss | soft Dice (sigmoid outputs, squared denominator, background excluded), no other terms |
-| Optimizer | AdamW, learning rate 1e-3, weight decay 1e-4, betas (0.9, 0.999), batch size 1, bfloat16 mixed precision, gradient clipping 1.0 |
-| Schedule | linear warm-up from 1e-4 over 10 epochs, then cosine decay to 1e-6, at most 200 epochs. Validate every 2 epochs; stop when validation Dice does not improve for 40 epochs. The held-out fold is used for early stopping and checkpoint selection |
-| Inference | best-Dice checkpoint, sigmoid threshold 0.5, small disconnected components removed, mask written back on the original full-scan grid |
-| Held-out Dice | 0.82 ± 0.11 ImageCHD, 0.73 ± 0.15 HVSMR-2.0, 0.73 ± 0.12 3DLabsCHD, 0.77 ± 0.13 all (mean ± SD over cases) |
-
-Held-out Dice per structure:
-
-| Cohort | n | LV | RV | LA | RA | Ao | PA | Mean |
-|---|---|---|---|---|---|---|---|---|
-| ImageCHD | 110 | .84 ± .15 | .81 ± .15 | .84 ± .13 | .85 ± .12 | .84 ± .14 | .71 ± .17 | .82 ± .11 |
-| HVSMR-2.0 | 60 | .81 ± .19 | .65 ± .32 | .75 ± .17 | .59 ± .38 | .89 ± .10 | .70 ± .21 | .73 ± .15 |
-| 3DLabsCHD | 88 | .77 ± .21 | .73 ± .19 | .76 ± .15 | .73 ± .21 | .78 ± .16 | .62 ± .19 | .73 ± .12 |
-
 ## 5. The paper's settings
 
 ### The episode
