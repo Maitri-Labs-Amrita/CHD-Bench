@@ -1,5 +1,5 @@
 {
- "_comment": "A small pilot with the paper's settings: three models, 10 ImageCHD cases each, split over two jobs per model. Copy to batch_config.json and edit. The full paper batches are in slurm/paper/. labels gt loads the manual masks; for predicted masks, set a path with {case}.",
+ "_comment": "A small pilot with the paper's settings: three models, 10 ImageCHD cases each, split over two jobs per model. Copy to batch_config.json and edit. The full paper batches are in slurm/paper/. labels gt loads the ground-truth segmentations; for predicted masks, set a path with {case}.",
  "batch": "paper-settings-pilot",
  "runtime_base": "config/runtime.local.json",
  "out_dir": "slurm/batches",

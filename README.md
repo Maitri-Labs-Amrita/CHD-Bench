@@ -89,7 +89,7 @@ class lists: [section 7](#7-scoring).
 
    A paid run asks for confirmation first (`--yes` skips it). Outputs: [section 10](#outputs).
 
-`--segmentation gt` shows the model the dataset's manual masks. The paper showed predicted masks instead.
+`--segmentation gt` shows the model the dataset's ground-truth segmentation. The paper showed predicted segmentations instead.
 See [section 4](#4-segmentation-masks).
 
 ## 4. Segmentation masks
@@ -100,7 +100,7 @@ that did not train on that scan).
 
 | `--segmentation` | What the model sees |
 |---|---|
-| `gt` | the dataset's manual masks (ImageCHD and HVSMR-2.0 only) |
+| `gt` | the dataset's ground-truth segmentation (ImageCHD and HVSMR-2.0 only) |
 | a file path | your mask for this scan |
 | not given | no segmentation and no segmentation tools (the paper's "No segmentation" setting) |
 
@@ -116,7 +116,7 @@ that did not train on that scan).
 | Setting | Value |
 |---|---|
 | Network | SwinUNETR (MONAI), feature size 48, stochastic depth 0.15, 1 input channel, 7 output channels (background, LV, RV, LA, RA, Ao, PA), random initialization (no pretrained weights) |
-| Training data | ImageCHD (110), HVSMR-2.0 (60) and 3DLabsCHD (88) manual masks, trained together |
+| Training data | ImageCHD (110), HVSMR-2.0 (60) and 3DLabsCHD (88) ground-truth segmentations, trained together |
 | Cross-validation | 3 folds, made within each cohort and stratified by CHD type: 37/37/36 ImageCHD, 20/20/20 HVSMR-2.0, 29/29/30 3DLabsCHD. Each fold's model trains on the other two folds of all cohorts and predicts its own fold |
 | Labels | ImageCHD and 3DLabsCHD: 1 LV, 2 RV, 3 LA, 4 RA, 6 Ao, 7 PA. HVSMR-2.0 is mapped to this scheme: Ao 5→6, PA 6→7, SVC, IVC and myocardium → background. Myocardium is not a training class |
 | Preprocessing | crop to the heart region, reorient to RAS, resize to 128 × 128 × 128 (trilinear for images, nearest-neighbor for labels), z-score over nonzero voxels. No augmentation |
@@ -194,7 +194,7 @@ Retries in the paper:
 ## 6. Reproduce the paper's tables
 
 Each row of the paper that this repository can run has a batch config in `slurm/paper/`. The configs hold the
-paper's cases, models and settings, and `labels: "gt"` (the manual masks). For your own predicted masks, set
+paper's cases, models and settings, and `labels: "gt"` (the ground-truth segmentations). For your own predicted masks, set
 `labels` to a path with `{case}` (the case id: `1001`, `3`) or `{stem}` (`ct_1001`, `hvsmr_3`).
 
 | Paper row | Cohort | Config | Runs | Paper cost |

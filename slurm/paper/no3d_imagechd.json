@@ -1,5 +1,5 @@
 {
- "_comment": "Paper Table 2, 'No 3D', imagechd (110 scans): Gemini 4 Argon with the segmentation in the slice views only; 12 of the 22 tools, no 3D view. Paper settings: 75 tool calls, USD 10 cost cap per episode, 32000 output tokens per turn (the run-episode default), no temperature, every earlier image kept. labels: gt loads the dataset's manual masks. The paper used out-of-fold SwinUNETR masks; to use your own predicted masks, set labels to a path with {case} (ImageCHD id) or {stem} (file stem), one NIfTI per case on the scan's grid, labels 1 LV, 2 RV, 3 LA, 4 RA, 6 Ao, 7 PA.",
+ "_comment": "Paper Table 2, 'No 3D', imagechd (110 scans): Gemini 4 Argon with the segmentation in the slice views only; 12 of the 22 tools, no 3D view. Paper settings: 75 tool calls, USD 10 cost cap per episode, 32000 output tokens per turn (the run-episode default), no temperature, every earlier image kept. labels: gt loads the dataset's ground-truth segmentations. The paper used out-of-fold SwinUNETR masks; to use your own predicted masks, set labels to a path with {case} (ImageCHD id) or {stem} (file stem), one NIfTI per case on the scan's grid, labels 1 LV, 2 RV, 3 LA, 4 RA, 6 Ao, 7 PA.",
  "batch": "paper-no3d_imagechd",
  "runtime_base": "config/runtime.local.json",
  "out_dir": "slurm/batches",

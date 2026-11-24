@@ -17,7 +17,7 @@ slurm/submit_parallel.sh slurm/batch_config.json                      # the batc
 uv run --group analysis python slurm/batch_metrics.py slurm/batches/<batch> --runtime config/runtime.local.json
 ```
 
-`slurm/paper/` holds one config for each paper row that this repository can run, with the paper's cases, models, efforts and caps (README, section 6). `batch_config.example.json` is a small pilot with the same settings: three models, 10 ImageCHD cases. Both use the manual masks (`labels: "gt"`); for predicted masks, set `labels` to a path with `{case}` or `{stem}`.
+`slurm/paper/` holds one config for each paper row that this repository can run, with the paper's cases, models, efforts and caps (README, section 6). `batch_config.example.json` is a small pilot with the same settings: three models, 10 ImageCHD cases. Both use the ground-truth segmentations (`labels: "gt"`); for predicted masks, set `labels` to a path with `{case}` or `{stem}`.
 
 - Edit the `#SBATCH` lines of `submit_parallel.sh` (partition, account, time) for your cluster. Each task uses 2 CPUs
   and 16 GB.
@@ -25,7 +25,7 @@ uv run --group analysis python slurm/batch_metrics.py slurm/batches/<batch> --ru
   default, or `hvsmr`); `labels` (`gt`, or a NIfTI path with `{stem}`, the case's file stem); `cost_cap` (USD per
   episode, default 10); `episode_timeout_s`; `runtime_base` (the runtime copied per job with absolute paths, default
   `config/runtime.local.json`); `arm`: `3d_seg` (default; needs `labels`) or `3d`, the scan without a segmentation
-  (either dataset, no `labels`; example `batch_config_nomask.example.json`), or `2d_seg` (predicted or manual mask in the slice views only).
+  (either dataset, no `labels`; example `batch_config_nomask.example.json`), or `2d_seg` (a predicted or ground-truth segmentation in the slice views only).
 - Output per job, in `slurm/batches/<batch>/job<k>_<name>/` (gitignored): `runtime.json`, `plan.json` (the planned
   cases), `job.log`, `logs/<case>.log`, `results.jsonl` (one line per attempt) and `eval_slicer.log`.
 - A failed or timed-out case is recorded and the next case runs.
